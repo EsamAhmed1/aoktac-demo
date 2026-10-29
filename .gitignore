@@ -1,0 +1,6 @@
+# Local working material (raw downloads, generations, test pages, review captures)
+source/
+.impeccable/
+.playwright-mcp/
+.claude/
+*.log

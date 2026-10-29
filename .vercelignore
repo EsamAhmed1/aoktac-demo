@@ -1,0 +1,6 @@
+# Internal notes stay in the repo but are not served
+PRODUCT.md
+DESIGN.md
+README.md
+assets/film/PROVENANCE.md
+assets/**/*.json
