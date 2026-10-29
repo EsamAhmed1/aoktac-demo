@@ -1,4 +1,4 @@
-// AOKTAC demo, round 2: scrubbed process film, 3D bottle and machine showcase,
+// AOKTAC demo: scrubbed process film, 3D bottle beside Aoktac's machine photos,
 // horizontal sectors story, scrubbed factory approach, quote form.
 
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -142,24 +142,29 @@ const liteVideo = innerWidth < 1100 || lowPower || slowNet;
 const startFilm = () => filmScrub.load(liteVideo ? "assets/film/film-1920-lite.mp4" : "assets/film/film-1920.mp4");
 if (document.readyState === "complete") startFilm(); else addEventListener("load", startFilm, { once: true });
 
-/* ---------- 2. 3D showcase ---------- */
+/* ---------- 2. Bottle and machine showcase ---------- */
 const STOPS = [
-  { litres: "0.6 L", dims: "Up to Ø 65 × 250 mm", model: "RL-12", cav: "12", bph: "24,000 BPH", machine: 0 },
-  { litres: "2 L", dims: "Up to Ø 95 × 320 mm", model: "RL-6II", cav: "6", bph: "12,000 BPH", machine: 0 },
-  { litres: "5 L", dims: "Up to Ø 180 × 360 mm", model: "RL-4-5L", cav: "4", bph: "On request", machine: 1 },
-  { litres: "20 L", dims: "Up to Ø 300 × 550 mm", model: "RL-2-20L", cav: "2", bph: "1,200 BPH", machine: 1 },
-  { litres: "30 L", dims: "Up to Ø 290 × 600 mm", model: "RL-1-30L", cav: "1", bph: "300 BPH", machine: 1 },
+  { litres: "0.6 L", dims: "Up to Ø 65 × 250 mm", model: "RL-12", cav: "12", bph: "24,000 BPH" },
+  { litres: "2 L", dims: "Up to Ø 95 × 320 mm", model: "RL-6II", cav: "6", bph: "12,000 BPH" },
+  { litres: "5 L", dims: "Up to Ø 180 × 360 mm", model: "RL-4-5L", cav: "4", bph: "On request" },
+  { litres: "20 L", dims: "Up to Ø 300 × 550 mm", model: "RL-2-20L", cav: "2", bph: "1,200 BPH" },
+  { litres: "30 L", dims: "Up to Ø 290 × 600 mm", model: "RL-1-30L", cav: "1", bph: "300 BPH" },
 ];
-const MACHINES = [
-  { src: "assets/models/tecblow-rl12.glb", photo: "assets/img/bottle-machine-0.webp", shown: "TEC BLOW RL-12" },
-  { src: "assets/models/tecblow-large.glb", photo: "assets/img/bottle-machine-1.webp", shown: "the large-container TEC BLOW pictured on Aoktac's RL-1 and RL-2 pages", yaw: 1.9 },
+// Aoktac's machine photos, one per size stop. Credits name what is pictured; where the photo
+// is not the model in the spec card, the credit says so.
+const PHOTOS = [
+  "Pictured: inside an Aoktac two-step machine, with the preform oven on the left and the blow station on the right.",
+  "Pictured: TEC BLOW RL-6II, the photo from its product page.",
+  "Pictured: AOK-2000 NEW TEC from Aoktac's standard range, not the RL-4-5L.",
+  "Pictured: an Aoktac one-step injection stretch blow molding machine, not the RL-2-20L.",
+  "Pictured: the large-container TEC BLOW shown on Aoktac's RL-1-30L page.",
 ];
 const showSec = $("#machines");
 const showStage = $(".show__stage", showSec);
 const ui = {
   litres: $("#show-litres"), dims: $("#show-dims"), model: $("#show-model"), cav: $("#show-cav"),
-  bph: $("#show-bph"), cta: $("#show-cta"), credit: $("#show-credit"), fallback: $(".show__machine .show__fallback", showSec),
-  stops: $$(".show__scale button", showSec), bottleImg: $(".show__bottle-img", showSec),
+  bph: $("#show-bph"), cta: $("#show-cta"), credit: $("#show-credit"),
+  stops: $$(".show__scale button", showSec), bottleImg: $(".show__bottle-img", showSec), photos: $$(".show__photo", showSec),
 };
 let showcase = null, showcaseLoading = false, showIndex = -1, showStageVal = 0;
 const hasWebGL = (() => { try { const c = document.createElement("canvas"); return !!(c.getContext("webgl2") || c.getContext("webgl")); } catch { return false; } })();
@@ -176,16 +181,14 @@ function setShowIndex(i) {
   const s = STOPS[i];
   ui.litres.textContent = s.litres;
   ui.dims.textContent = s.dims;
-  ui.model.textContent = `TEC BLOW ${s.model}`;
+  ui.model.textContent = `TEC BLOW ${s.model.replace(/-/g, "‑")}`; // non-breaking hyphens keep the model code on one line
   ui.cav.textContent = s.cav;
   ui.bph.textContent = s.bph;
-  const m = MACHINES[s.machine];
-  const medium = showSec.classList.contains("no-webgl") ? "Render of the 3D model" : "3D model";
-  ui.credit.textContent = `Shown: ${m.shown}. ${medium} made from Aoktac's product photo, not to scale with the bottle.`;
+  ui.credit.textContent = `${PHOTOS[i]} Photo from Aoktac, not to scale with the bottle.`;
   if (ui.bottleImg) ui.bottleImg.src = `assets/img/bottle-${i}.webp`;
   ui.cta.dataset.model = s.model;
   ui.cta.dataset.size = s.litres;
-  if (ui.fallback.getAttribute("src") !== MACHINES[s.machine].photo) ui.fallback.src = MACHINES[s.machine].photo;
+  ui.photos.forEach((img, k) => img.setAttribute("aria-hidden", k === i ? "false" : "true"));
   ui.stops.forEach((b, k) => { if (k === i) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current"); });
   if (!reduceMotion) {
     for (const el of [ui.litres, ui.model]) {
@@ -202,16 +205,31 @@ async function initShowcase() {
     showcase = createShowcase({
       canvas: $(".show__canvas", showSec),
       bottleSlot: $("[data-slot=bottle]", showSec),
-      machineSlot: $("[data-slot=machine]", showSec),
       lowPower,
       reduced: reduceMotion,
-      machines: MACHINES.map((m) => ({ src: m.src, yaw: m.yaw || 0, onError: () => { showSec.classList.add("no-webgl"); showIndex = -1; } })),
     });
   } catch (err) {
     console.warn("3D showcase unavailable", err);
     showSec.classList.add("no-webgl");
     showIndex = -1;
   }
+}
+// Photos follow the same curve the bottle uses to morph between sizes: the outgoing machine
+// clears in the first half of the morph and the next one arrives as its bottle settles.
+// Fading through the backdrop avoids two cut-out machines showing through each other.
+const photoPaint = ui.photos.map(() => ({ o: -1, x: 0 }));
+function paintPhotos(stage) {
+  const n = STOPS.length - 1, i = Math.min(n - 1, Math.floor(stage)), f = smooth(0.12, 0.88, stage - i);
+  ui.photos.forEach((img, k) => {
+    const o = k === i ? 1 - smooth(0.04, 0.5, f) : k === i + 1 ? smooth(0.5, 0.96, f) : 0;
+    const x = reduceMotion ? 0 : k === i ? -f * 3 : k === i + 1 ? (1 - f) * 3 : 0;
+    const last = photoPaint[k], ro = Math.round(o * 1000) / 1000, rx = Math.round(x * 100) / 100;
+    if (ro === last.o && rx === last.x) return;
+    last.o = ro; last.x = rx;
+    img.style.opacity = ro;
+    img.style.transform = rx ? `translate3d(${rx}%, 0, 0)` : "";
+    img.style.visibility = ro > 0 ? "visible" : "hidden";
+  });
 }
 function paintShow(dt) {
   const near = nearView(showSec, 1);
@@ -220,6 +238,7 @@ function paintShow(dt) {
   const target = stageFromProgress(progressOf(showSec));
   showStageVal += (target - showStageVal) * (reduceMotion ? 1 : 1 - Math.exp(-dt * 8));
   setShowIndex(clamp(Math.round(showStageVal), 0, STOPS.length - 1));
+  paintPhotos(showStageVal);
   if (showcase) {
     const visible = nearView(showSec, 0.05);
     showcase.setVisible(visible);

@@ -34,3 +34,17 @@ The film is a process visualization, labelled as such on the page. Replace with 
 - factory-1080p.mp4, 1080x1920, CRF 26 (portrait)
 
 **3D machines.** tecblow-large.glb was regenerated with Higgsfield Hunyuan3D v3 (job 51044072-ed3e-4ca1-8fa4-f20c02808fc5, 500k faces, PBR) from aoktac.com ig15, simplified to 42% with meshoptimizer, textures 2048 px. A Hunyuan3D RL-12 (job 4a4e24d8-4f08-4e24-a001-bdeb3bb3c502) was generated and rejected because it garbled the TEC BLOW lettering; tecblow-rl12.glb remains the Tripo reconstruction, now with 2048 px textures. Both are single-image reconstructions, not CAD.
+
+## Round 4 (2026-10-30): real machine photos replace the 3D machines
+
+The 3D machine models (tecblow-rl12.glb, tecblow-large.glb) and their pre-rendered fallbacks were removed from the site. The machine panel now shows five cut-out machine photos supplied by the client on 2026-10-30 (originals kept in source/machines-supplied/). Each was only trimmed to its alpha bounds with 12 px padding and saved as WebP (quality 94, lossless-quality alpha) at its native resolution; nothing was retouched, upscaled, regenerated or recoloured.
+
+| File | Supplied | Matches aoktac.com | Shown at |
+|---|---|---|---|
+| machine-0.webp | 8.webp, 1448x1086 | not on the site; a two-step machine with panels off (preform oven, blow station) | 0.6 L |
+| machine-1.webp | 5.png, 1200x900 | ig13, the TEC BLOW RL-6II product photo | 2 L |
+| machine-2.webp | 9.png, 1200x900 | ig04, AOK-2000 NEW TEC (standard range) | 5 L |
+| machine-3.webp | 6.webp, 1200x900 | ig07 to ig09, one-step injection stretch blow molding machine | 20 L |
+| machine-4.webp | 7.png, 1200x900 | ig15 and ig19, the large-container photo on the RL-4-5L, RL-2-20L and RL-1-30L pages | 30 L |
+
+Only the 2 L and 30 L pairings are backed by Aoktac's product pages. The 5 L and 20 L credits state that the pictured machine is not the model in the spec card.

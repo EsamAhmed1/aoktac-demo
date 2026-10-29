@@ -1,8 +1,6 @@
 // AOKTAC 3D showcase: a PET bottle that grows through the published TEC BLOW
-// container envelopes, beside the machine that blows it. One renderer, two studio viewports.
+// container envelopes. The machine beside it is Aoktac's own photography, driven by app.js.
 import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 
 const N = 220;          // profile samples, shared by every bottle so shapes can morph
 const SEG = 128;        // radial segments
@@ -124,7 +122,7 @@ function blobTexture() {
 }
 
 // Product-photography studio used as the environment map: a dark room with large softboxes.
-// The softboxes draw clean highlights along clear PET and across the white machine panels.
+// The softboxes draw clean highlights along clear PET.
 function studioEnvironment(renderer) {
   const scene = new THREE.Scene();
   const room = new THREE.Mesh(new THREE.BoxGeometry(20, 12, 20), new THREE.MeshBasicMaterial({ color: 0x2a3340, side: THREE.BackSide }));
@@ -146,7 +144,7 @@ function studioEnvironment(renderer) {
   return env;
 }
 
-// Each viewport is a small photo studio: graded backdrop, soft key shadow, contact shadow.
+// The viewport is a small photo studio: graded backdrop, soft key shadow, contact shadow.
 function makeStudioScene(env, top, bottom) {
   const scene = new THREE.Scene();
   scene.environment = env;
@@ -173,7 +171,7 @@ function makeStudioScene(env, top, bottom) {
   return { scene, key, blob };
 }
 
-export function createShowcase({ canvas, bottleSlot, machineSlot, lowPower, reduced, machines }) {
+export function createShowcase({ canvas, bottleSlot, lowPower, reduced }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: "high-performance" });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, lowPower ? 1.5 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -207,43 +205,7 @@ export function createShowcase({ canvas, bottleSlot, machineSlot, lowPower, redu
   cap.castShadow = true;
   const bGroup = new THREE.Group(); bGroup.add(bottle, cap); B.scene.add(bGroup);
 
-  // Machine studio
-  const M = makeStudioScene(env, "#edf1f4", "#c9d2db");
-  M.key.intensity = 2.6;
-  Object.assign(M.key.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4 });
-  const mCam = new THREE.PerspectiveCamera(30, 1, 0.1, 200);
-  const machineGroups = machines.map(() => { const g = new THREE.Group(); M.scene.add(g); return g; });
-  const loaded = machines.map(() => false);
-
-  const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
-  const maxAniso = renderer.capabilities.getMaxAnisotropy();
-  function loadMachine(i) {
-    if (loaded[i] !== false) return;
-    loaded[i] = "loading";
-    loader.load(machines[i].src, (gltf) => {
-      const obj = gltf.scene;
-      const box = new THREE.Box3().setFromObject(obj);
-      const size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
-      const s = 3 / Math.max(size.x, size.y, size.z);
-      obj.scale.setScalar(s);
-      obj.position.set(-c.x * s, -box.min.y * s, -c.z * s);
-      obj.traverse((o) => {
-        if (!o.isMesh) return;
-        o.castShadow = true; o.receiveShadow = true;
-        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
-          m.envMapIntensity = 0.85;
-          for (const k of ["map", "normalMap", "roughnessMap", "metalnessMap", "aoMap"]) if (m[k]) m[k].anisotropy = maxAniso;
-          m.needsUpdate = true;
-        }
-      });
-      machineGroups[i].add(obj);
-      machineGroups[i].userData.size = size.multiplyScalar(s);
-      loaded[i] = true;
-      machines[i].onLoad?.();
-    }, undefined, () => { loaded[i] = "failed"; machines[i].onError?.(); });
-  }
-
-  const state = { stage: 0, machine: 0, mix: 1, px: 0, py: 0, tx: 0, ty: 0, visible: false, t: 0 };
+  const state = { stage: 0, px: 0, py: 0, tx: 0, ty: 0, visible: false, t: 0 };
 
   function rectOf(el) {
     const r = el.getBoundingClientRect(), c = canvas.getBoundingClientRect();
@@ -255,7 +217,7 @@ export function createShowcase({ canvas, bottleSlot, machineSlot, lowPower, redu
 
   function setStage(s) { state.stage = s; }
   function setPointer(x, y) { state.tx = x; state.ty = y; }
-  function setVisible(v) { state.visible = v; if (v) machines.forEach((_, i) => loadMachine(i)); }
+  function setVisible(v) { state.visible = v; }
 
   const cA = new THREE.Color(), cB = new THREE.Color();
   let lastShape = -1;
@@ -293,38 +255,15 @@ export function createShowcase({ canvas, bottleSlot, machineSlot, lowPower, redu
     bCam.position.set(0, 3.6, dist); bCam.lookAt(0, 3.05, 0);
     bCam.updateProjectionMatrix();
 
-    // Machine: compact range for small bottles, large-container machine from 5 L.
-    const want = state.stage < 1.5 ? 0 : 1;
-    if (want !== state.machine) { state.machine = want; state.mix = reduced ? 1 : 0; }
-    state.mix = Math.min(1, state.mix + dt * 2.2);
-    machineGroups.forEach((g, gi) => {
-      const k = gi === state.machine ? smooth(0, 1, state.mix) : 1 - smooth(0, 1, state.mix);
-      g.visible = k > 0.02 && loaded[gi] === true;
-      g.scale.setScalar(0.9 + 0.1 * k);
-      g.position.y = (1 - k) * -0.2;
-      g.rotation.y = -0.55 + (machines[gi].yaw || 0) + state.px * 0.45 + Math.sin(state.t * 0.2) * 0.04;
-    });
-    const active = machineGroups[state.machine].userData.size;
-    if (active) M.blob.scale.set(active.x * 1.6, active.z * 2.4, 1);
-    const mRect = rectOf(machineSlot);
-    mCam.aspect = mRect.w / Math.max(1, mRect.h);
-    const big = state.machine === 1;
-    const mDist = (mCam.aspect < 1 ? 7.4 : 5.6) * (big ? 1.12 : 1);
-    mCam.position.set(Math.sin(state.px * 0.15) * 0.4, 1.7 + state.py * 0.25, mDist);
-    mCam.lookAt(0, big ? 0.72 : 0.95, 0);
-    mCam.updateProjectionMatrix();
-
     renderer.setScissor(0, 0, canvas.width, canvas.height);
     renderer.setViewport(0, 0, canvas.clientWidth, canvas.clientHeight);
     renderer.setClearColor(0x000000, 0);
     renderer.clear();
-    for (const [scene, cam, r] of [[B.scene, bCam, bRect], [M.scene, mCam, mRect]]) {
-      if (r.w < 2 || r.h < 2) continue;
-      renderer.setViewport(r.x, r.y, r.w, r.h);
-      renderer.setScissor(r.x, r.y, r.w, r.h);
-      renderer.render(scene, cam);
-    }
+    if (bRect.w < 2 || bRect.h < 2) return;
+    renderer.setViewport(bRect.x, bRect.y, bRect.w, bRect.h);
+    renderer.setScissor(bRect.x, bRect.y, bRect.w, bRect.h);
+    renderer.render(B.scene, bCam);
   }
 
-  return { setStage, setPointer, setVisible, frame, resize, loaded };
+  return { setStage, setPointer, setVisible, frame, resize };
 }

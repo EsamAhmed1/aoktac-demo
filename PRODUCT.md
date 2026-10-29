@@ -8,7 +8,7 @@ web
 
 ## Stack
 
-Static HTML, CSS and one JavaScript module, no build step, matching the existing demo convention. Lenis loads from a CDN for smooth scrolling. Films are scrubbed by the page's own requestAnimationFrame loop (no GSAP). Three.js 0.169 from jsDelivr (import map) renders the 3D bottle and machine showcase, loaded only when that section is near. The scroll story is a Higgsfield-generated film scrubbed by scroll. Vercel static deploy only after Rob approves it.
+Static HTML, CSS and one JavaScript module, no build step, matching the existing demo convention. Lenis loads from a CDN for smooth scrolling. Films are scrubbed by the page's own requestAnimationFrame loop (no GSAP). Three.js 0.169 from jsDelivr (import map) renders the 3D bottle, loaded only when that section is near; the machine beside it is Aoktac's own photography. The scroll story is a Higgsfield-generated film scrubbed by scroll. Vercel static deploy only after Rob approves it.
 
 ## Users
 

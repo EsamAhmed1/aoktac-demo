@@ -353,7 +353,7 @@ Solid, flat blue plates.
 
 ### Cards / Containers
 - **Chapter plate:** panel white, the chapter plate frame, padding 1.6rem by 1.7rem, at most 25rem wide. It holds a serif italic chapter name, a slate sentence, and a spec ledger with steel-2 rules and tabular values. On the Heat plate the values are amber ink. Plates fade in and lift 14px within their film time window.
-- **Spec card (showcase nameplate):** 90% white, 1px steel frame, 2px corners, padding 1.2rem by 1.3rem, at most 20rem wide. It shows the model name (Inter 500, 1.35rem), a two-up facts ledger (cavities and rated output, caption labels over tabular values) under a steel-2 rule, a plate "Request a quote" button that pre-fills the quote form, and a caption credit naming the machine shown and stating the 3D model is not to scale with the bottle. On narrow screens it becomes a two-column strip with the button top-right.
+- **Spec card (showcase nameplate):** 90% white, 1px steel frame, 2px corners, padding 1.2rem by 1.3rem, at most 20rem wide. It shows the model name (Inter 500, 1.35rem), a two-up facts ledger (cavities and rated output, caption labels over tabular values) under a steel-2 rule, a plate "Request a quote" button that pre-fills the quote form, and a caption credit naming the machine pictured (and, where the photo is not the model in the card, saying so) and stating the photo is not to scale with the bottle. On narrow screens it becomes a two-column strip with the button top-right.
 - **Quote form panel:** panel white, 1px steel frame, 2px corners, padding clamp(18px, 3vw, 36px), on the hall-white contact section.
 
 ### Inputs / Fields
@@ -363,11 +363,11 @@ Solid, flat blue plates.
 - **Error:** an error-red border, and a 0.875rem error message under the field.
 
 ### Navigation
-- **Top bar:** fixed and hall white, with a 1px steel bottom rule. It holds the raster AOKTAC wordmark (24px, 19px on phones), six text links at 0.9375rem and 400 in navy that turn blue on hover, the 中文 link, and a small plate "Request a quote".
+- **Top bar:** fixed and hall white, with a 1px steel bottom rule. It holds the raster AOKTAC wordmark (24px, 19px on phones), six text links at 0.9375rem and 400 in navy that turn blue on hover, and a small plate "Request a quote". Every link on the page is an in-page anchor; contact details are plain text.
 - **Mobile (1100px and below):** a Menu button opens a full-width hall-white drawer of stacked 1.0625rem links with steel-2 dividers and the drawer drop. Escape closes it and returns focus to the button.
 
-### 3D Showcase (signature)
-A Three.js canvas, loaded only when the section is near, renders a clear PET bottle and a TEC BLOW machine into two scissored viewports. Scroll holds on each of five published container sizes, then morphs the bottle profile to the next over the middle of the band (smoothstep 0.3 to 0.75). The camera frames the tallest container, so growth reads at true relative scale. The machine swaps from the compact RL-12 to the large-container model at 5 L with a quick fade and scale. On fine pointers the bottle and machine follow the cursor. When the size changes, the serif readout and model name refresh with a 380ms rise on the out-expo curve. Without WebGL (`.show.no-webgl`), pre-rendered bottle and machine images fill the same slots, and the credit says "Render of the 3D model".
+### Bottle and Machine Showcase (signature)
+A Three.js canvas, loaded only when the section is near, renders a clear PET bottle in a studio viewport. Beside it, the machine panel shows Aoktac's own cut-out machine photography, one photo per size, standing on one floor line over a CSS studio sweep that matches the bottle's backdrop, with a soft contact shadow; photos use `object-fit: contain` so no machine is cropped or stretched. Scroll holds on each of five published container sizes, then morphs the bottle profile to the next over the middle of the band (smoothstep 0.3 to 0.75). The machine photos are driven by the same stage value and morph curve: the outgoing photo clears over the first half of the morph and drifts 3% left, the next arrives over the second half from 3% right, so two cut-outs never show through each other. On fine pointers the bottle follows the cursor. When the size changes, the serif readout and model name refresh with a 380ms rise on the out-expo curve. Without WebGL (`.show.no-webgl`), pre-rendered bottle images fill the bottle slot; the machine photos are unaffected.
 
 ### Sectors Band (signature)
 On navy, an intro panel (headline with a PET-blue serif accent and an on-ink-slate lede) leads a row of six photo panels. Each panel has a slate placeholder ground and a photo bled 4% past its edges. A navy gradient sits top and bottom, with a white sector word at the top and a 0.9375rem, 500-weight material note at the bottom. The word crosses the panel edge into the gap. On wide screens the row holds, then translates with scroll. Each photo drifts against its panel by up to 40px as it crosses the screen and shifts up to 18 by 14px toward the cursor (0.6s, out-expo). The swipe variant (`.hz.is-swipe`, used for phones, portrait tablets and reduced motion) lifts the intro above a native scroll-snap row of 80vw panels, 12px apart, with the progress line following horizontal scroll.
@@ -388,7 +388,7 @@ The scroll-scrubbed opening, with five still frames that crossfade over 0.35s un
 - **Do** outline fields and the menu button in control steel, and keep brushed steel for dividers and frames.
 - **Do** set every corner at 2px and every border at 1px.
 - **Do** build moving chapters as pinned 100svh stages driven by scroll progress, each with a still or pre-rendered fallback.
-- **Do** label generated films and 3D models as visualizations on the stage itself.
+- **Do** label generated films and the 3D bottle as visualizations on the stage itself, and name the machine in every photo.
 - **Do** set every published figure in tabular numerals with its unit, and write "On request" where a figure is not published.
 
 ### Don't:

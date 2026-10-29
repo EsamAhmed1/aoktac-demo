@@ -143,7 +143,7 @@ p { margin: 0; }
 .film__cue-line { width: 1px; height: 44px; background: linear-gradient(var(--ink), rgba(11, 30, 51, 0)); animation: cue 2.2s var(--ease-out) infinite; transform-origin: top; }
 @keyframes cue { 0% { transform: scaleY(0); } 60% { transform: scaleY(1); } 100% { transform: scaleY(1); opacity: 0; } }
 
-/* ---------- 2. 3D showcase ---------- */
+/* ---------- 2. Bottle and machine showcase ---------- */
 .show { position: relative; height: 520vh; background: var(--hall); border-top: 1px solid var(--steel); }
 .show__stage { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; }
 .show__canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -153,10 +153,26 @@ p { margin: 0; }
   pointer-events: none;
 }
 .show__bottle { margin-top: clamp(96px, 15vh, 150px); }
-.show__machine { position: relative; border-left: 1px solid var(--steel-2); margin-bottom: clamp(260px, 36vh, 310px); }
+.show__machine {
+  position: relative; border-left: 1px solid var(--steel-2); margin-bottom: clamp(260px, 36vh, 310px); overflow: hidden;
+  /* Same studio sweep as the bottle viewport: bright wall, soft horizon, cooler floor */
+  background: linear-gradient(180deg, #eef2f5 0%, #e9eef2 50%, #d6dee4 74%, #c9d2db 100%);
+}
+.show__photos { position: absolute; inset: 0; }
+.show__photos::after {
+  content: ""; position: absolute; left: 12%; right: 12%; bottom: 6%; height: 8%;
+  background: radial-gradient(closest-side, rgba(11, 30, 51, .2), rgba(11, 30, 51, 0));
+}
+/* Photos stand on one floor line; contain keeps every machine whole and unstretched */
+.show__photo {
+  position: absolute; left: 6%; right: 6%; top: 9%; bottom: 9%; width: 88%; height: 82%; z-index: 1;
+  object-fit: contain; object-position: 50% 100%;
+  opacity: 0; visibility: hidden; will-change: opacity, transform;
+}
+.show__photo--0 { opacity: 1; visibility: visible; }
+.show__photo--2 { top: 6%; }
 .show__bottle { position: relative; }
 .show__fallback { display: none; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 85%; }
-.show__machine .show__fallback { object-position: 50% 55%; }
 .show.no-webgl .show__fallback { display: block; }
 .show.no-webgl .show__canvas { display: none; }
 
@@ -348,6 +364,8 @@ p { margin: 0; }
   .show__grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1.1fr) minmax(0, 1fr); inset: calc(var(--bar-h) + 176px) var(--gutter) 236px; gap: 6px; }
   .show__bottle { margin-top: 0; }
   .show__machine { border-left: 0; border-top: 1px solid var(--steel-2); margin-bottom: 0; }
+  .show__photo { left: 3%; right: 3%; top: 6%; bottom: 7%; width: 94%; height: 87%; }
+  .show__photos::after { bottom: 5%; }
   .show__head { top: calc(var(--bar-h) + 16px); max-width: none; right: var(--gutter); }
   .show__title { font-size: clamp(1.9rem, 6.4vw, 2.6rem); }
   .show__lede { font-size: .8125rem; }

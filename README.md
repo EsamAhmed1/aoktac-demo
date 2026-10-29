@@ -6,4 +6,4 @@ Plain HTML, CSS and ES modules, no build step. Three.js and Lenis load from CDNs
 Run locally: `python -m http.server 5174` in this folder, then open http://localhost:5174.
 Deploy: any static host. On Vercel, import the repo with the "Other" preset and no build command.
 
-Films and 3D models are visualizations generated from Aoktac's own photos; see assets/film/PROVENANCE.md.
+Films and the 3D bottle are visualizations generated from Aoktac's own photos; the machine photos are Aoktac's own. See assets/film/PROVENANCE.md.
