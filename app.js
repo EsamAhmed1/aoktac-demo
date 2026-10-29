@@ -153,11 +153,11 @@ const STOPS = [
 // Aoktac's machine photos, one per size stop. Credits name what is pictured; where the photo
 // is not the model in the spec card, the credit says so.
 const PHOTOS = [
-  "Pictured: inside an Aoktac two-step machine, with the preform oven on the left and the blow station on the right.",
-  "Pictured: TEC BLOW RL-6II, the photo from its product page.",
-  "Pictured: AOK-2000 NEW TEC from Aoktac's standard range, not the RL-4-5L.",
-  "Pictured: an Aoktac one-step injection stretch blow molding machine, not the RL-2-20L.",
-  "Pictured: the large-container TEC BLOW shown on Aoktac's RL-1-30L page.",
+  "Pictured: an Aoktac rendering of a two-step machine, panels off.",
+  "Pictured: TEC BLOW RL-6II.",
+  "Pictured: AOK-2000 NEW TEC, not the RL-4-5L.",
+  "Pictured: an Aoktac one-step machine, not the RL-2-20L.",
+  "Pictured: the large-container TEC BLOW from the RL-1-30L page.",
 ];
 const showSec = $("#machines");
 const showStage = $(".show__stage", showSec);
@@ -184,7 +184,8 @@ function setShowIndex(i) {
   ui.model.textContent = `TEC BLOW ${s.model.replace(/-/g, "‑")}`; // non-breaking hyphens keep the model code on one line
   ui.cav.textContent = s.cav;
   ui.bph.textContent = s.bph;
-  ui.credit.textContent = `${PHOTOS[i]} Photo from Aoktac, not to scale with the bottle.`;
+  ui.credit.textContent = `${PHOTOS[i]} Images from Aoktac, not to scale with the bottle.`
+    .replace(/\b(RL|AOK)-[\w-]+/g, (m) => m.replace(/-/g, "‑")); // model codes stay on one line
   if (ui.bottleImg) ui.bottleImg.src = `assets/img/bottle-${i}.webp`;
   ui.cta.dataset.model = s.model;
   ui.cta.dataset.size = s.litres;

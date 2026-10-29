@@ -41,7 +41,7 @@ The 3D machine models (tecblow-rl12.glb, tecblow-large.glb) and their pre-render
 
 | File | Supplied | Matches aoktac.com | Shown at |
 |---|---|---|---|
-| machine-0.webp | 8.webp, 1448x1086 | not on the site; a two-step machine with panels off (preform oven, blow station) | 0.6 L |
+| machine-0.webp | 8.webp, 1448x1086 | not on the site; an Aoktac rendering of a two-step machine with panels off (preform oven, blow station) | 0.6 L |
 | machine-1.webp | 5.png, 1200x900 | ig13, the TEC BLOW RL-6II product photo | 2 L |
 | machine-2.webp | 9.png, 1200x900 | ig04, AOK-2000 NEW TEC (standard range) | 5 L |
 | machine-3.webp | 6.webp, 1200x900 | ig07 to ig09, one-step injection stretch blow molding machine | 20 L |
