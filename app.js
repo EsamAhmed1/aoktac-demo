@@ -136,7 +136,10 @@ function paintFilm(dt) {
     if (idx !== lastStill) { stills.forEach((img, i) => img.classList.toggle("is-on", i === idx)); lastStill = idx; }
   } else if (lastStill !== -2) { stills.forEach((img) => img.classList.remove("is-on")); lastStill = -2; }
 }
-const startFilm = () => filmScrub.load(innerWidth < 900 ? "assets/film/film-960.mp4" : "assets/film/film-1280.mp4");
+// Full HD everywhere; phones, tablets and slow connections get a lighter encode of the same 1080p frames.
+const slowNet = navigator.connection && /(^|-)3g$/.test(navigator.connection.effectiveType || "");
+const liteVideo = innerWidth < 1100 || lowPower || slowNet;
+const startFilm = () => filmScrub.load(liteVideo ? "assets/film/film-1920-lite.mp4" : "assets/film/film-1920.mp4");
 if (document.readyState === "complete") startFilm(); else addEventListener("load", startFilm, { once: true });
 
 /* ---------- 2. 3D showcase ---------- */
@@ -149,7 +152,7 @@ const STOPS = [
 ];
 const MACHINES = [
   { src: "assets/models/tecblow-rl12.glb", photo: "assets/img/bottle-machine-0.webp", shown: "TEC BLOW RL-12" },
-  { src: "assets/models/tecblow-large.glb", photo: "assets/img/bottle-machine-1.webp", shown: "the large-container TEC BLOW pictured on Aoktac's RL-1 and RL-2 pages" },
+  { src: "assets/models/tecblow-large.glb", photo: "assets/img/bottle-machine-1.webp", shown: "the large-container TEC BLOW pictured on Aoktac's RL-1 and RL-2 pages", yaw: 1.9 },
 ];
 const showSec = $("#machines");
 const showStage = $(".show__stage", showSec);
@@ -202,7 +205,7 @@ async function initShowcase() {
       machineSlot: $("[data-slot=machine]", showSec),
       lowPower,
       reduced: reduceMotion,
-      machines: MACHINES.map((m) => ({ src: m.src, onError: () => { showSec.classList.add("no-webgl"); showIndex = -1; } })),
+      machines: MACHINES.map((m) => ({ src: m.src, yaw: m.yaw || 0, onError: () => { showSec.classList.add("no-webgl"); showIndex = -1; } })),
     });
   } catch (err) {
     console.warn("3D showcase unavailable", err);
@@ -301,7 +304,7 @@ const BEATS = [[0, 0.2], [0.28, 0.46], [0.54, 0.72], [0.8, 1.2]];
 const facPortrait = () => innerWidth / innerHeight < 0.9;
 if (facPortrait()) facPoster.src = "assets/film/factory-poster-p.webp";
 function paintFac(dt) {
-  if (nearView(fac, 1)) facScrub.load(facPortrait() ? "assets/film/factory-720p.mp4" : "assets/film/factory-1280.mp4");
+  if (nearView(fac, 1)) facScrub.load(facPortrait() ? "assets/film/factory-1080p.mp4" : "assets/film/factory-1920.mp4");
   if (!nearView(fac, 0.2)) return;
   const p = progressOf(fac);
   facScrub.step(p * facScrub.duration, dt);

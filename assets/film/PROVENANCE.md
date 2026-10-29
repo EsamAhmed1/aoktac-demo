@@ -20,3 +20,17 @@ The film is a process visualization, labelled as such on the page. Replace with 
 **Bottles** are procedural geometry in showcase3d.js, sized to each model's published maximum container (diameter x height).
 
 **Sector photos** (assets/img/sector-*-hd.webp) are Aoktac's own website images ps01 to ps06, upscaled with Higgsfield bytedance_image_upscale.
+
+## Round 3 (2026-10-30): video upscale and 3D rebuild
+
+**Video audit.** The round-2 web files were downscaled to 1280x720 and 960x540 at 1.7 to 3.1 Mbps with a keyframe every 4 frames, which made them blocky at full screen. The originals were 1928x1076 (film) and 1976x1048 / 1076x1928 (factory) at 10 to 19 Mbps.
+
+**Upscale.** All six source clips (film clips 1 to 4, factory 16:9 and 9:16) were AI-upscaled with Higgsfield bytedance_video_upscale, preset "aigc", to 2K (2580x1440, 2710x1440 and 1440x2580). Jobs: 767663e3-9c84-43a7-92a9-8185948fc663, c9871e85-6484-463c-9c71-61c919a586f8, 49602361-cc72-4aaf-9d85-e4e0b6380d70, c4271cb9-b75b-4259-bcd3-b5bdc09f3409, 52eba32e-6973-4c09-858f-686fb70074a5, 5f3e0a90-f314-42a6-98c8-e82c4d81af37.
+
+**Web encodes** (H.264 High, x264 slow, tune film, keyframe every 6 frames, Lanczos downscale from 2K):
+- film-1920.mp4, 1920x1080, CRF 21 (desktop)
+- film-1920-lite.mp4, 1920x1080, CRF 27 (phones, tablets, slow connections)
+- factory-1920.mp4, 1920x1080, CRF 22 (landscape)
+- factory-1080p.mp4, 1080x1920, CRF 26 (portrait)
+
+**3D machines.** tecblow-large.glb was regenerated with Higgsfield Hunyuan3D v3 (job 51044072-ed3e-4ca1-8fa4-f20c02808fc5, 500k faces, PBR) from aoktac.com ig15, simplified to 42% with meshoptimizer, textures 2048 px. A Hunyuan3D RL-12 (job 4a4e24d8-4f08-4e24-a001-bdeb3bb3c502) was generated and rejected because it garbled the TEC BLOW lettering; tecblow-rl12.glb remains the Tripo reconstruction, now with 2048 px textures. Both are single-image reconstructions, not CAD.
