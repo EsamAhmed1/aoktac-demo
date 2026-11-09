@@ -103,7 +103,7 @@ p { margin: 0; }
 /* Image-sequence version of the film (Safari, phones, tablets), cover-fit by app.js */
 .film__frames, .fac__frames { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity .4s ease; }
 .film__frames.is-ready, .fac__frames.is-ready { opacity: 1; }
-.film__heat { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 90% at 50% 120%, rgba(242, 138, 46, .22), rgba(242, 138, 46, 0) 60%); opacity: var(--heat, 0); }
+.film__heat { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 90% at 50% 120%, rgba(242, 138, 46, .22), rgba(242, 138, 46, 0) 60%); opacity: 0; }
 .film__media::after {
   content: ""; position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(90deg, rgba(243, 246, 248, .9) 0%, rgba(243, 246, 248, .62) 32%, rgba(243, 246, 248, 0) 56%);
@@ -149,7 +149,8 @@ p { margin: 0; }
 @keyframes cue { 0% { transform: scaleY(0); } 60% { transform: scaleY(1); } 100% { transform: scaleY(1); opacity: 0; } }
 
 /* ---------- 2. Bottle and machine showcase ---------- */
-.show { position: relative; height: 520vh; background: var(--hall); border-top: 1px solid var(--steel); }
+/* One screen plus half a screen per size step: each step is a single scroll gesture */
+.show { position: relative; height: 300vh; background: var(--hall); border-top: 1px solid var(--steel); }
 .show__stage { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; }
 .show__canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .show__grid {
@@ -373,7 +374,7 @@ p { margin: 0; }
 
 /* Tablet portrait and phone: showcase stacks bottle over machine, sectors become a swipe row */
 @media (max-width: 900px), (orientation: portrait) and (max-width: 1100px) {
-  .show { height: 400vh; }
+  .show { height: 260vh; }   /* 40% of a screen per size on phones: one ordinary swipe */
   .show__grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1.1fr) minmax(0, 1fr); inset: calc(var(--bar-h) + 176px) var(--gutter) 248px; gap: 6px; }
   .show__bottle { margin-top: 0; }
   .show__machine { border-left: 0; border-top: 1px solid var(--steel-2); margin-bottom: 0; }

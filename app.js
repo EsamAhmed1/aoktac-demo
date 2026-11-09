@@ -42,9 +42,26 @@ nav.addEventListener("click", (e) => { if (e.target.closest("a")) setMenu(false)
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && nav.classList.contains("is-open")) { setMenu(false); menuBtn.focus(); } });
 
 /* ---------- Shared helpers ---------- */
+// Geometry is read once at the start of each frame, before anything is written, and values are
+// written only when they change. The browser then never recalculates style or layout mid-frame,
+// which is what makes scroll animation stutter on phones.
+let frameRects = new Map(), vh = innerHeight;
+function rectOf(el) {
+  let r = frameRects.get(el);
+  if (!r) { r = el.getBoundingClientRect(); frameRects.set(el, r); }
+  return r;
+}
+const written = new WeakMap();
+function setStyle(el, prop, value) {
+  let w = written.get(el);
+  if (!w) { w = {}; written.set(el, w); }
+  if (w[prop] === value) return;
+  w[prop] = value;
+  if (prop.startsWith("--")) el.style.setProperty(prop, value); else el.style[prop] = value;
+}
 function progressOf(section) {
-  const r = section.getBoundingClientRect();
-  const run = r.height - innerHeight;
+  const r = rectOf(section);
+  const run = r.height - vh;
   return run > 0 ? clamp(-r.top / run, 0, 1) : (r.top < 0 ? 1 : 0);
 }
 function scrollForProgress(section, p) {
@@ -52,8 +69,8 @@ function scrollForProgress(section, p) {
   return top + p * (section.offsetHeight - innerHeight);
 }
 function nearView(el, margin = 1.5) {
-  const r = el.getBoundingClientRect();
-  return r.bottom > -innerHeight * margin && r.top < innerHeight * (1 + margin);
+  const r = rectOf(el);
+  return r.bottom > -vh * margin && r.top < vh * (1 + margin);
 }
 function fadeIn(t, from, to, fade) {
   if (t < from - fade || t > to + fade) return 0;
@@ -62,11 +79,12 @@ function fadeIn(t, from, to, fade) {
   return 1;
 }
 function show(el, a, lift = 14) {
-  a = clamp(a, 0, 1);
-  el.style.opacity = a.toFixed(3);
-  el.style.visibility = a > 0.01 ? "visible" : "hidden";
-  el.style.transform = reduceMotion ? "" : `translateY(${((1 - a) * lift).toFixed(1)}px)`;
-  el.inert = a < 0.5;
+  a = Math.round(clamp(a, 0, 1) * 200) / 200;
+  setStyle(el, "opacity", String(a));
+  setStyle(el, "visibility", a > 0.01 ? "visible" : "hidden");
+  setStyle(el, "transform", reduceMotion ? "" : `translateY(${((1 - a) * lift).toFixed(1)}px)`);
+  const inert = a < 0.5;
+  if (el.inert !== inert) el.inert = inert;
 }
 
 // WebKit (Safari, and every browser on iPhone and iPad) refuses video from blob: URLs,
@@ -145,6 +163,9 @@ class FrameScrub {
     this.retired = false; this.onReady = null;
     this.blobs = []; this.bitmaps = new Map(); this.decoding = new Set(); this.heading = 1;
     this.urgent = []; this.queue = []; this.inflight = 0;
+    // Canvas size is measured only when it changes, never during the frame loop.
+    this.cw = canvas.clientWidth; this.ch = canvas.clientHeight;
+    new ResizeObserver(() => { this.cw = canvas.clientWidth; this.ch = canvas.clientHeight; this.sig = ""; }).observe(canvas);
   }
   free() {
     for (const b of this.bitmaps.values()) b.close?.();
@@ -241,9 +262,10 @@ class FrameScrub {
     }
     const c = this.canvas, iw = a.width, ih = a.height;
     // Never draw finer than the frames themselves: more canvas pixels would add cost, not detail.
-    const fit = Math.max(c.clientWidth / iw, c.clientHeight / ih);
+    if (!this.cw || !this.ch) return this.shown;
+    const fit = Math.max(this.cw / iw, this.ch / ih);
     const dpr = clamp(1 / fit, 1, Math.min(devicePixelRatio || 1, 2));
-    const w = Math.round(c.clientWidth * dpr), h = Math.round(c.clientHeight * dpr);
+    const w = Math.round(this.cw * dpr), h = Math.round(this.ch * dpr);
     const ox = this.pan ? this.ox : 50;
     const sig = `${w}x${h}:${ox.toFixed(1)}:${i0}:${b ? Math.round(mix * 48) : -1}`;
     if (sig === this.sig) return this.shown;
@@ -295,6 +317,8 @@ function filmPlayer(canvas, video, duration) {
 /* ---------- 1. Hero and process film ---------- */
 const film = $("#film");
 const filmStage = $(".film__stage", film);
+const filmMedia = $(".film__media", film);
+const filmHeat = $(".film__heat", film);
 const filmScrub = filmPlayer($(".film__frames", film), $(".film__video", film), 22.13);
 const stills = $$(".film__still", film);
 const CAPS = {
@@ -318,9 +342,10 @@ function paintFilm(dt) {
   const portrait = innerWidth / innerHeight < 1.2;
   filmScrub.ox = portrait ? focusAt(filmScrub.shown) : 50;
   const t = filmScrub.step(filmScrub.duration * progressOf(film), dt);
-  filmStage.style.setProperty("--ox", portrait ? `${focusAt(t).toFixed(1)}%` : "50%");
-  filmStage.style.setProperty("--heat", clamp(1 - Math.abs(t - 7) / 4, 0, 1).toFixed(3));
-  filmStage.style.setProperty("--wash", clamp(1 - t / 1.8, 0, 1).toFixed(3));
+  // --ox pans the stills and video; the canvas pans itself, so skip it while the canvas shows.
+  if (!(filmScrub.frames.ready && !filmScrub.full?.ready)) setStyle(filmMedia, "--ox", portrait ? `${focusAt(t).toFixed(1)}%` : "50%");
+  setStyle(filmHeat, "opacity", clamp(1 - Math.abs(t - 7) / 4, 0, 1).toFixed(2));
+  setStyle(filmMedia, "--wash", clamp(1 - t / 1.8, 0, 1).toFixed(2));
   for (const { el, cfg } of caps) show(el, fadeIn(t, cfg.from, cfg.to, cfg.fade));
   if (!filmScrub.ready) {
     let idx = 0;
@@ -382,11 +407,10 @@ const gpuName = (() => {
 const hasWebGL = gpuName !== null && !/swiftshader|llvmpipe|softpipe|software|basic render/i.test(gpuName);
 if (!hasWebGL) showSec.classList.add("no-webgl");
 
-// Scroll progress holds on each size, then moves to the next.
-function stageFromProgress(p) {
-  const n = STOPS.length - 1, x = p * n, i = Math.min(n - 1, Math.floor(x)), f = x - i;
-  return i + smooth(0.3, 0.75, f);
-}
+// One scroll = one size. The scroll position only picks a size (the nearest stop); the bottle and
+// the machine photo then animate to it in about half a second, so the section never rests between
+// two sizes.
+const stopFromProgress = (p) => Math.round(p * (STOPS.length - 1));
 function setShowIndex(i) {
   if (i === showIndex) return;
   showIndex = i;
@@ -477,8 +501,9 @@ function paintShow(dt) {
   const near = nearView(showSec, 1);
   if (near || (document.readyState === "complete" && performance.now() - lastScrollAt > 250)) initShowcase();
   if (!near && !showcase) return;
-  const target = stageFromProgress(progressOf(showSec));
-  showStageVal += (target - showStageVal) * (reduceMotion ? 1 : 1 - Math.exp(-dt * 8));
+  const target = stopFromProgress(progressOf(showSec));
+  showStageVal += (target - showStageVal) * (reduceMotion ? 1 : 1 - Math.exp(-dt * 6.5));
+  if (Math.abs(target - showStageVal) < 0.002) showStageVal = target;
   setShowIndex(clamp(Math.round(showStageVal), 0, STOPS.length - 1));
   paintPhotos(showStageVal);
   if (showcase) {
@@ -496,6 +521,50 @@ if (canHover && !reduceMotion) {
   showStage.addEventListener("pointerleave", () => showcase?.setPointer(0, 0));
 }
 // Each stop holds over the middle of its scroll band; jump to that point.
+// Desktop (wheel and trackpad): while the section is pinned, each gesture moves exactly one size.
+// The rest of that gesture (trackpad inertia, a spun wheel) is absorbed until it ends, and at the
+// first or last size a fresh gesture scrolls the page on as normal.
+let wheelAt = 0, stepping = false, stepTimer = 0;
+addEventListener("wheel", (e) => {
+  if (!lenis) return;
+  const r = showSec.getBoundingClientRect(), run = r.height - innerHeight;
+  if (run <= 0 || r.top > 2 || r.bottom < innerHeight - 2) return;          // not pinned
+  const now = performance.now(), fresh = now - wheelAt > 220;
+  wheelAt = now;
+  const dir = Math.sign(e.deltaY);
+  if (!dir) return;
+  const n = STOPS.length - 1, at = stopFromProgress(clamp(-r.top / run, 0, 1));
+  if (fresh && !stepping && ((dir > 0 && at >= n) || (dir < 0 && at <= 0))) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const go = (to, duration) => {
+    stepping = true;
+    clearTimeout(stepTimer);
+    stepTimer = setTimeout(() => { stepping = false; }, duration * 1000 + 120);
+    lenis.scrollTo(scrollForProgress(showSec, to / n), { duration, force: true });
+  };
+  if (stepping) return;
+  if (fresh) go(clamp(at + dir, 0, n), 0.65);
+  else go(at, 0.45);   // a gesture that carried in from above settles on the nearest size
+}, { capture: true, passive: false });
+// Touch: sizes are 40% of a screen apart, so any ordinary swipe changes size. When a swipe comes
+// to rest inside the pinned section, the page glides to the nearest size; outside it nothing is
+// touched, so scrolling in and out stays completely free.
+if (touchFirst) {
+  let settle = 0, touching = false;
+  const settleShow = () => {
+    if (touching) return;
+    const r = showSec.getBoundingClientRect(), run = r.height - innerHeight;
+    if (run <= 0 || r.top > 0 || r.bottom < innerHeight) return;            // only while pinned
+    const n = STOPS.length - 1, k = stopFromProgress(clamp(-r.top / run, 0, 1));
+    const y = scrollForProgress(showSec, k / n);
+    if (Math.abs(y - scrollY) > 2) window.scrollTo({ top: y, behavior: reduceMotion ? "auto" : "smooth" });
+  };
+  const queue = () => { clearTimeout(settle); settle = setTimeout(settleShow, 160); };
+  addEventListener("touchstart", () => { touching = true; clearTimeout(settle); }, { passive: true });
+  addEventListener("touchend", () => { touching = false; queue(); }, { passive: true });
+  addEventListener("scroll", queue, { passive: true });
+}
 ui.stops.forEach((b, i) => b.addEventListener("click", () => {
   const n = STOPS.length - 1;
   scrollToY(scrollForProgress(showSec, i / n));
@@ -516,10 +585,17 @@ function layoutHz() {
   // On touch layouts the intro becomes a heading above the swipe row, so the row opens on a full photo.
   if (hzSwipe && hzIntro.parentElement !== hzStage) hzStage.insertBefore(hzIntro, hzTrack);
   if (!hzSwipe && hzIntro.parentElement !== hzTrack) hzTrack.insertBefore(hzIntro, hzTrack.firstChild);
-  if (hzSwipe) { hz.style.height = ""; hzTrack.style.transform = ""; return; }
+  hzMax = hzTrack.scrollWidth - hzTrack.clientWidth;
+  if (hzSwipe) { hz.style.height = ""; hzTrack.style.transform = ""; written.delete(hzTrack); return; }
   hzRun = Math.max(0, hzTrack.scrollWidth - innerWidth);
   hz.style.height = `${innerHeight + hzRun / 0.92}px`;
+  hzBoxes = hzPanels.map((panel) => ({ img: panel.querySelector(".hz__media img"), left: panel.offsetLeft, width: panel.offsetWidth }));
 }
+let hzMax = 0, hzBoxes = [];
+// In the swipe row the progress line follows the row's own scroll, not every frame.
+hzTrack.addEventListener("scroll", () => {
+  if (hzSwipe) setStyle(hzBar, "--hp", hzMax > 0 ? (hzTrack.scrollLeft / hzMax).toFixed(3) : "0");
+}, { passive: true });
 // Load every sector photo once the section is near. Lazy images inside a sideways scroller only
 // start when swiped into view on iPhone, which would show blank cards mid-swipe.
 let hzWarm = false;
@@ -528,23 +604,19 @@ function paintHz() {
     hzWarm = true;
     for (const img of $$("img", hz)) { img.loading = "eager"; img.decode?.().catch(() => {}); }
   }
-  if (hzSwipe) {
-    const max = hzTrack.scrollWidth - hzTrack.clientWidth;
-    hzBar.style.setProperty("--hp", max > 0 ? (hzTrack.scrollLeft / max).toFixed(3) : "0");
-    return;
-  }
+  if (hzSwipe) return;
   if (!nearView(hz, 0.2)) return;
   const raw = progressOf(hz);
   const p = clamp((raw - 0.08) / 0.92, 0, 1);   // hold the intro whole before the row moves
-  hzTrack.style.transform = `translate3d(${(-p * hzRun).toFixed(1)}px,0,0)`;
-  hzBar.style.setProperty("--hp", p.toFixed(3));
-  // Each image drifts against its panel as it crosses the screen.
-  for (const panel of hzPanels) {
-    const img = panel.querySelector(".hz__media img");
+  const shift = p * hzRun;
+  setStyle(hzTrack, "transform", `translate3d(${(-shift).toFixed(1)}px,0,0)`);
+  setStyle(hzBar, "--hp", p.toFixed(3));
+  // Each image drifts against its panel as it crosses the screen (positions from the cached layout).
+  const vw = innerWidth;
+  for (const { img, left, width } of hzBoxes) {
     if (!img) continue;
-    const r = panel.getBoundingClientRect();
-    const off = clamp(((r.left + r.width / 2) - innerWidth / 2) / innerWidth, -0.6, 0.6);
-    img.style.setProperty("--sx", `${(-off * 0.045 * r.width).toFixed(1)}px`);   // drift scales with the card, inside its bleed
+    const off = clamp(((left - shift + width / 2) - vw / 2) / vw, -0.6, 0.6);
+    setStyle(img, "--sx", `${(-off * 0.045 * width).toFixed(1)}px`);   // drift scales with the card, inside its bleed
   }
 }
 if (canHover && !reduceMotion) {
@@ -589,6 +661,9 @@ function tick(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   lenis?.raf(now);
+  // read phase: every section's position for this frame, before any writes
+  frameRects = new Map(); vh = innerHeight;
+  rectOf(film); rectOf(showSec); rectOf(hz); rectOf(fac);
   paintFilm(dt);
   paintShow(dt);
   paintHz();

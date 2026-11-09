@@ -197,7 +197,7 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced }) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.toneMappingExposure = 1.0;
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = !lowPower;
   renderer.shadowMap.type = THREE.VSMShadowMap;
   renderer.setScissorTest(true);
   if ("transmissionResolutionScale" in renderer) renderer.transmissionResolutionScale = lowPower ? 0.6 : 1;
@@ -231,7 +231,11 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced }) {
     const r = el.getBoundingClientRect(), c = canvas.getBoundingClientRect();
     return { x: r.left - c.left, y: c.bottom - r.bottom, w: r.width, h: r.height };
   }
-  function resize() { renderer.setSize(canvas.clientWidth, canvas.clientHeight, false); }
+  // The bottle slot sits at a fixed place on the canvas (both live in the pinned stage), so it is
+  // measured on resize, not every frame.
+  let slot = null;
+  function resize() { renderer.setSize(canvas.clientWidth, canvas.clientHeight, false); slot = rectOf(bottleSlot); }
+  new ResizeObserver(resize).observe(canvas);
   window.addEventListener("resize", resize);
 
   // Reduced quality for slow GPUs: 1x pixels, half-resolution refraction, no soft shadow map
@@ -289,7 +293,7 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced }) {
     bGroup.rotation.x = state.py * 0.06;
 
     // Camera frames the tallest container so growth reads at true relative scale.
-    const bRect = rectOf(bottleSlot);
+    const bRect = slot || (slot = rectOf(bottleSlot));
     bCam.aspect = bRect.w / Math.max(1, bRect.h);
     const dist = (7.4 / 2) / Math.tan(THREE.MathUtils.degToRad(bCam.fov / 2)) * (bCam.aspect < 0.75 ? 1.15 : 1);
     bCam.position.set(0, 3.6, dist); bCam.lookAt(0, 3.05, 0);
