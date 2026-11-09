@@ -48,3 +48,13 @@ The 3D machine models (tecblow-rl12.glb, tecblow-large.glb) and their pre-render
 | machine-4.webp | 7.png, 1200x900 | ig15 and ig19, the large-container photo on the RL-4-5L, RL-2-20L and RL-1-30L pages | 30 L |
 
 Only the 2 L and 30 L pairings are backed by Aoktac's product pages. The 5 L and 20 L credits state that the pictured machine is not the model in the spec card.
+
+## Round 5 (2026-11-10): image-sequence frames
+
+assets/film/frames/ holds the same two films as numbered WebP stills at 10 frames per second, extracted with ffmpeg from the shipped encodes (no new generation):
+- hero-l/ 221 frames, 1600x900, from film-1920.mp4 (Lanczos, WebP q72)
+- hero-p/ 221 frames, 608x1080 crops of film-1920.mp4 at native resolution, panned with the page's FOCUS curve (WebP q74)
+- fac-l/ 100 frames, 1600x900, from factory-1920.mp4 (WebP q72)
+- fac-p/ 100 frames, 720x1280, from factory-1080p.mp4 (WebP q74)
+
+Safari, iPhone, iPad and other touch devices scrub these frames on a canvas; desktop Chrome, Edge and Firefox start on them and hand over to the full video once it has downloaded.

@@ -100,6 +100,9 @@ p { margin: 0; }
 .film__still.is-on { opacity: 1; }
 .film__video { opacity: 0; transition: opacity .4s ease; }
 .film__video.is-ready { opacity: 1; }
+/* Image-sequence version of the film (Safari, phones, tablets), cover-fit by app.js */
+.film__frames, .fac__frames { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity .4s ease; }
+.film__frames.is-ready, .fac__frames.is-ready { opacity: 1; }
 .film__heat { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 90% at 50% 120%, rgba(242, 138, 46, .22), rgba(242, 138, 46, 0) 60%); opacity: var(--heat, 0); }
 .film__media::after {
   content: ""; position: absolute; inset: 0; pointer-events: none;
@@ -234,9 +237,11 @@ p { margin: 0; }
 .hz__lede { color: var(--on-ink-2); max-width: 24rem; }
 .hz__panel img {
   position: absolute; inset: -4%; width: 108%; height: 108%; object-fit: cover; max-width: none;
-  transform: translate3d(calc(var(--px, 0px) + var(--sx, 0px)), var(--py, 0px), 0) scale(1.04);
+  transform: translate3d(calc(var(--px, 0px) + var(--sx, 0px)), var(--py, 0px), 0) scale(calc(1.04 * var(--zoom, 1)));
   transition: transform .6s var(--ease-out);
 }
+/* Oil: 10% closer, anchored on the jerrycan handle so the handle frames the word */
+.hz__panel--oil img { --zoom: 1.1; transform-origin: 22% 13%; }
 .hz__panel figcaption {
   position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between;
   padding: clamp(14px, var(--card-pad), 36px); border-radius: 2px;
@@ -422,4 +427,5 @@ p { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
   .hz__panel img { transform: none; }
+  .hz__panel--oil img { transform: scale(1.1); }
 }

@@ -122,10 +122,118 @@ class Scrub {
   }
 }
 
+// The same film as a numbered image sequence drawn to a canvas. Used where scrubbing a <video>
+// is unreliable (Safari, and every phone and tablet): there is no seeking or decoding to wait
+// on, so the picture tracks the scroll exactly. Frames load coarse-to-fine (every 16th first).
+const touchFirst = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+const useFrames = !blobVideo || touchFirst;
+class FrameScrub {
+  constructor(canvas, duration, fps) {
+    this.canvas = canvas; this.ctx = canvas.getContext("2d");
+    this.duration = duration; this.fps = fps;
+    this.ready = false; this.shown = 0; this.dir = ""; this.frames = [];
+    this.ox = 50; this.pan = false; this.drawn = null; this.sig = "";
+    this.retired = false; this.onReady = null;
+  }
+  // Hand over to the full video: stop fetching frames and fade the canvas out over it.
+  retire() {
+    this.retired = true;
+    this.canvas.classList.remove("is-ready");
+  }
+  load(dir, count, pan = false) {
+    if (reduceMotion || saveData || this.retired || dir === this.dir) return;
+    this.dir = dir; this.pan = pan; this.count = count;
+    this.frames = new Array(count); this.ready = false; this.drawn = null;
+    this.canvas.classList.remove("is-ready");
+    const order = [0, count - 1], seen = new Set(order);
+    for (const stride of [16, 8, 4, 2, 1]) for (let i = 0; i < count; i += stride) if (!seen.has(i)) { seen.add(i); order.push(i); }
+    const firstPass = Math.ceil(count / 16) + 1;
+    let next = 0, loaded = 0;
+    const pump = () => {
+      if (this.dir !== dir || this.retired || next >= order.length) return;
+      const i = order[next++], img = new Image();
+      img.decoding = "async";
+      img.onload = () => {
+        // Decode off the main thread before the frame can be drawn, so drawing never stalls.
+        (img.decode ? img.decode() : Promise.resolve()).catch(() => {}).then(() => {
+          if (this.dir !== dir || this.retired) return;
+          this.frames[i] = img;
+          if (++loaded >= firstPass && !this.ready) { this.ready = true; this.canvas.classList.add("is-ready"); this.onReady?.(); }
+          pump();
+        });
+      };
+      img.onerror = pump;
+      img.src = `${dir}${String(i).padStart(3, "0")}.webp`;
+    };
+    for (let k = 0; k < 6; k++) pump();
+  }
+  nearest(i) {
+    for (let d = 0; d < this.count; d++) {
+      if (this.frames[i - d]) return this.frames[i - d];
+      if (this.frames[i + d]) return this.frames[i + d];
+    }
+    return null;
+  }
+  step(target, dt) {
+    this.shown += (target - this.shown) * (reduceMotion ? 1 : 1 - Math.exp(-dt * 9));
+    if (Math.abs(target - this.shown) < 0.004) this.shown = target;
+    if (!this.ready || this.retired) return this.shown;
+    const img = this.nearest(clamp(Math.round(this.shown * this.fps), 0, this.count - 1));
+    const c = this.canvas;
+    if (!img) return this.shown;
+    // Never draw finer than the frames themselves: more canvas pixels would add cost, not detail.
+    const fit = Math.max(c.clientWidth / img.naturalWidth, c.clientHeight / img.naturalHeight);
+    const dpr = clamp(1 / fit, 1, Math.min(devicePixelRatio || 1, 2));
+    const w = Math.round(c.clientWidth * dpr), h = Math.round(c.clientHeight * dpr);
+    const ox = this.pan ? this.ox : 50;
+    const sig = `${w}x${h}:${ox.toFixed(1)}`;
+    if (img !== this.drawn || sig !== this.sig) {
+      if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+      // cover-fit, with the same horizontal focus as CSS object-position
+      const s = Math.max(w / img.naturalWidth, h / img.naturalHeight), dw = img.naturalWidth * s, dh = img.naturalHeight * s;
+      this.ctx.drawImage(img, (w - dw) * ox / 100, (h - dh) / 2, dw, dh);
+      this.drawn = img; this.sig = sig;
+    }
+    return this.shown;
+  }
+}
+
+// Frames first, video second. The image sequence is ready after about 0.5 MB, so the film
+// follows the scroll almost at once on any connection. On desktop Chrome, Edge and Firefox the
+// full 24 fps video then downloads in the background and takes over at the same moment of the
+// film; everywhere else the frames stay.
+function filmPlayer(canvas, video, duration) {
+  const frames = new FrameScrub(canvas, duration, 10);
+  const full = useFrames ? null : new Scrub(video, duration);
+  return {
+    frames, full, duration,
+    get ready() { return frames.ready || !!full?.ready; },
+    get shown() { return full?.ready ? full.shown : frames.shown; },
+    set ox(v) { frames.ox = v; },
+    load(frameDir, count, pan, videoSrc) {
+      if (full && videoSrc && !this.videoQueued) {
+        this.videoQueued = true;
+        frames.onReady = () => full.load(videoSrc);
+        setTimeout(() => full.load(videoSrc), 4000);   // also if the frames never arrive
+      }
+      frames.load(frameDir, count, pan);
+    },
+    step(target, dt) {
+      if (full?.ready) {
+        if (!frames.retired) frames.retire();
+        return full.step(target, dt);
+      }
+      const t = frames.step(target, dt);
+      if (full) full.shown = t;   // the video starts exactly where the frames are
+      return t;
+    },
+  };
+}
+
 /* ---------- 1. Hero and process film ---------- */
 const film = $("#film");
 const filmStage = $(".film__stage", film);
-const filmScrub = new Scrub($(".film__video", film), 22.13);
+const filmScrub = filmPlayer($(".film__frames", film), $(".film__video", film), 22.13);
 const stills = $$(".film__still", film);
 const CAPS = {
   hero: { from: -1, to: 1.2, fade: 1.1 }, cue: { from: -1, to: 0.4, fade: 0.8 },
@@ -145,8 +253,9 @@ const focusAt = (t) => {
 let lastStill = -1;
 function paintFilm(dt) {
   if (!nearView(film, 0.2)) return;
-  const t = filmScrub.step(filmScrub.duration * progressOf(film), dt);
   const portrait = innerWidth / innerHeight < 1.2;
+  filmScrub.ox = portrait ? focusAt(filmScrub.shown) : 50;
+  const t = filmScrub.step(filmScrub.duration * progressOf(film), dt);
   filmStage.style.setProperty("--ox", portrait ? `${focusAt(t).toFixed(1)}%` : "50%");
   filmStage.style.setProperty("--heat", clamp(1 - Math.abs(t - 7) / 4, 0, 1).toFixed(3));
   filmStage.style.setProperty("--wash", clamp(1 - t / 1.8, 0, 1).toFixed(3));
@@ -160,8 +269,15 @@ function paintFilm(dt) {
 // Full HD everywhere; phones, tablets and slow connections get a lighter encode of the same 1080p frames.
 const slowNet = navigator.connection && /(^|-)3g$/.test(navigator.connection.effectiveType || "");
 const liteVideo = innerWidth < 1100 || lowPower || slowNet;
-const startFilm = () => filmScrub.load(liteVideo ? "assets/film/film-1920-lite.mp4" : "assets/film/film-1920.mp4");
-if (document.readyState === "complete") startFilm(); else addEventListener("load", startFilm, { once: true });
+// Frame sets: phones get a 608x1080 crop that already follows the film's pan; wider screens
+// get 1600x900 frames panned on the canvas.
+const filmVideoSrc = liteVideo ? "assets/film/film-1920-lite.mp4" : "assets/film/film-1920.mp4";
+const filmFrames = () => innerWidth / innerHeight < 0.8
+  ? filmScrub.load("assets/film/frames/hero-p/", 221, false, filmVideoSrc)
+  : filmScrub.load("assets/film/frames/hero-l/", 221, true, filmVideoSrc);
+addEventListener("resize", () => { if (filmScrub.frames.dir) filmFrames(); });
+// Start as soon as the page is parsed rather than after every image has loaded.
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", filmFrames, { once: true }); else filmFrames();
 
 /* ---------- 2. Bottle and machine showcase ---------- */
 const STOPS = [
@@ -374,14 +490,17 @@ addEventListener("load", layoutHz, { once: true });
 
 /* ---------- 4. Factory approach ---------- */
 const fac = $("#factory");
-const facScrub = new Scrub($(".fac__video", fac), 10);
+const facScrub = filmPlayer($(".fac__frames", fac), $(".fac__video", fac), 10);
 const facPoster = $(".fac__poster", fac);
 const beats = $$(".fac__beat", fac);
 const BEATS = [[0, 0.2], [0.28, 0.46], [0.54, 0.72], [0.8, 1.2]];
 const facPortrait = () => innerWidth / innerHeight < 0.9;
 if (facPortrait()) facPoster.src = "assets/film/factory-poster-p.webp";
 function paintFac(dt) {
-  if (nearView(fac, 1)) facScrub.load(facPortrait() ? "assets/film/factory-1080p.mp4" : "assets/film/factory-1920.mp4");
+  if (nearView(fac, 1)) {
+    facScrub.load(facPortrait() ? "assets/film/frames/fac-p/" : "assets/film/frames/fac-l/", 100, false,
+      facPortrait() ? "assets/film/factory-1080p.mp4" : "assets/film/factory-1920.mp4");
+  }
   if (!nearView(fac, 0.2)) return;
   const p = progressOf(fac);
   facScrub.step(p * facScrub.duration, dt);
