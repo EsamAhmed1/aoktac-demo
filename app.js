@@ -572,7 +572,8 @@ const BEATS = [[0, 0.2], [0.28, 0.46], [0.54, 0.72], [0.8, 1.2]];
 const facPortrait = () => innerWidth / innerHeight < 0.9;
 if (facPortrait()) facPoster.src = "assets/film/factory-poster-p.webp";
 function paintFac(dt) {
-  if (nearView(fac, 1)) {
+  // Fetch three screens early so the frames are already here when the visitor arrives.
+  if (nearView(fac, 3)) {
     facScrub.load(facPortrait() ? "assets/film/frames/fac-p/" : "assets/film/frames/fac-l/", 100, false,
       facPortrait() ? "assets/film/factory-1080p.mp4" : "assets/film/factory-1920.mp4");
   }
