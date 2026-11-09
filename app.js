@@ -522,35 +522,36 @@ if (canHover && !reduceMotion) {
 }
 // Each stop holds over the middle of its scroll band; jump to that point.
 // Desktop (wheel and trackpad): while the section is pinned, a scroll moves exactly one size.
-// Inertia after a trackpad flick keeps declining, so it is absorbed; held scrolling (a wheel spun
-// steadily, an active trackpad push) stays level, so it keeps stepping, one size per animation,
-// and carries on out of the section after the first or last size.
-let wheelAt = 0, wheelDir = 0, wheelHist = [], stepping = false, stepTimer = 0;
-const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+//  - A trackpad sends a stream of ever-changing amounts. One gesture, inertia included, is one
+//    step; the gesture ends when the stream pauses.
+//  - A mouse wheel sends identical notches (100 px in Chrome, 3 lines in Firefox). Held spinning
+//    keeps stepping, one size per animation, and carries on out of the section at either end.
+let wheelAt = 0, wheelDir = 0, wheelAbs = 0, stepping = false, stepTimer = 0;
 addEventListener("wheel", (e) => {
   if (!lenis) return;
   const r = showSec.getBoundingClientRect(), run = r.height - innerHeight;
   if (run <= 0 || r.top > 2 || r.bottom < innerHeight - 2) return;          // not pinned
-  const now = performance.now(), dir = Math.sign(e.deltaY);
+  // Event time, not handling time: if the page is briefly busy, queued events of the same gesture
+  // must not look like a pause.
+  const now = e.timeStamp, dir = Math.sign(e.deltaY), abs = Math.abs(e.deltaY);
   if (!dir) return;
   const fresh = now - wheelAt > 220 || dir !== wheelDir;
-  if (fresh) wheelHist = [];
-  wheelHist.push(Math.abs(e.deltaY));
-  if (wheelHist.length > 10) wheelHist.shift();
-  wheelAt = now; wheelDir = dir;
-  const held = wheelHist.length === 10 && mean(wheelHist.slice(5)) >= mean(wheelHist.slice(0, 5)) * 0.9;
-  const pushing = fresh || held;
+  const notch = (e.deltaMode === 1 || abs >= 50) && Math.abs(abs - wheelAbs) <= abs * 0.02;
+  wheelAt = now; wheelDir = dir; wheelAbs = abs;
+  const pushing = fresh || notch;
   const n = STOPS.length - 1, at = stopFromProgress(clamp(-r.top / run, 0, 1));
   if (pushing && !stepping && ((dir > 0 && at >= n) || (dir < 0 && at <= 0))) return;   // leave
   e.preventDefault();
   e.stopPropagation();
   if (stepping) return;
-  const to = pushing ? clamp(at + dir, 0, n) : at;      // a declining flick settles where it is
+  const to = pushing ? clamp(at + dir, 0, n) : at;      // the rest of a trackpad gesture settles
+  const target = scrollForProgress(showSec, to / n);
+  if (!pushing && Math.abs(target - scrollY) < 2) return;   // already on a size: just absorb
   const duration = pushing ? 0.65 : 0.4;
   stepping = true;
   clearTimeout(stepTimer);
   stepTimer = setTimeout(() => { stepping = false; }, duration * 1000 + 80);
-  lenis.scrollTo(scrollForProgress(showSec, to / n), { duration, force: true });
+  lenis.scrollTo(target, { duration, force: true });
 }, { capture: true, passive: false });
 // Touch: sizes are 40% of a screen apart, so any ordinary swipe changes size. When a swipe comes
 // to rest inside the pinned section, the page glides to the nearest size; outside it nothing is
