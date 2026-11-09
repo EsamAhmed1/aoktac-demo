@@ -2,8 +2,8 @@
 // container envelopes. The machine beside it is Aoktac's own photography, driven by app.js.
 import * as THREE from "three";
 
-const N = 220;          // profile samples, shared by every bottle so shapes can morph
-const SEG = 128;        // radial segments
+let N = 220;            // profile samples, shared by every bottle so shapes can morph
+let SEG = 128;          // radial segments (both lowered on phones and low-power devices)
 const MM = 0.01;        // world units per millimetre
 
 // Bottle families sized to each machine's published maximum container (diameter x height, mm).
@@ -65,22 +65,40 @@ function makeLathe() {
   }
   g.setIndex(idx);
   g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  g.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(pos.length), 3));
+  // Fixed bounds that hold every size (tallest is 0.6 m): no per-reshape bounds pass.
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 3, 0), 4.5);
   return g;
 }
+const ringCos = [], ringSin = [];
 function writeLathe(g, prof) {
-  const p = g.attributes.position.array;
+  const p = g.attributes.position.array, nrm = g.attributes.normal.array, W = SEG + 1;
+  if (ringCos.length !== W) { ringCos.length = ringSin.length = 0; for (let j = 0; j <= SEG; j++) { const th = (j / SEG) * Math.PI * 2; ringCos.push(Math.cos(th)); ringSin.push(Math.sin(th)); } }
   let k = 0;
   for (let i = 0; i < N; i++) {
     const r = prof[i * 3], y = prof[i * 3 + 1], pe = prof[i * 3 + 2];
     for (let j = 0; j <= SEG; j++) {
-      const th = (j / SEG) * Math.PI * 2;
-      const rr = r * (1 - pe + pe * (0.55 + 0.45 * Math.cos(5 * th)));
-      p[k++] = Math.cos(th) * rr; p[k++] = y; p[k++] = Math.sin(th) * rr;
+      const rr = pe ? r * (1 - pe + pe * (0.55 + 0.45 * Math.cos(5 * (j / SEG) * Math.PI * 2))) : r;
+      p[k++] = ringCos[j] * rr; p[k++] = y; p[k++] = ringSin[j] * rr;
+    }
+  }
+  // Normals straight from the surface grid (along the profile x around the bottle): a fraction of
+  // the cost of a triangle-by-triangle pass, which matters because the mesh reshapes while scrolling.
+  for (let i = 0; i < N; i++) {
+    const iu = Math.min(N - 1, i + 1) * W, id = Math.max(0, i - 1) * W, ic = i * W;
+    for (let j = 0; j <= SEG; j++) {
+      const jr = j === SEG ? 1 : j + 1, jl = j === 0 ? SEG - 1 : j - 1;
+      const u = (iu + j) * 3, d = (id + j) * 3, rgt = (ic + jr) * 3, lft = (ic + jl) * 3;
+      const ax = p[u] - p[d], ay = p[u + 1] - p[d + 1], az = p[u + 2] - p[d + 2];
+      const bx = p[rgt] - p[lft], by = p[rgt + 1] - p[lft + 1], bz = p[rgt + 2] - p[lft + 2];
+      let nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+      const len = Math.hypot(nx, ny, nz) || 1;
+      const o = (ic + j) * 3;
+      nrm[o] = nx / len; nrm[o + 1] = ny / len; nrm[o + 2] = nz / len;
     }
   }
   g.attributes.position.needsUpdate = true;
-  g.computeVertexNormals();
-  g.computeBoundingSphere();
+  g.attributes.normal.needsUpdate = true;
 }
 
 // Ribbed screw cap, unit radius and height; scaled to the neck per frame.
@@ -172,6 +190,8 @@ function makeStudioScene(env, top, bottom) {
 }
 
 export function createShowcase({ canvas, bottleSlot, lowPower, reduced }) {
+  // A lighter mesh on phones: identical at that size, and about a third of the work per reshape.
+  if (lowPower) { N = 150; SEG = 80; }
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: "high-performance" });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, lowPower ? 1.5 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -246,14 +266,16 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced }) {
     state.py += (state.ty - state.py) * (1 - Math.exp(-dt * 4));
 
     // Bottle morph between the two neighbouring published envelopes
-    if (Math.abs(state.stage - lastShape) > 1e-4) {
-      const i = Math.min(BOTTLES.length - 2, Math.floor(state.stage));
-      const f = smooth(0.12, 0.88, state.stage - i);
+    // Reshape in 64 steps per size change: invisible at this scale, and far fewer mesh rebuilds.
+    const shape = Math.round(state.stage * 64) / 64;
+    if (Math.abs(shape - lastShape) > 1e-4) {
+      const i = Math.min(BOTTLES.length - 2, Math.floor(shape));
+      const f = smooth(0.12, 0.88, shape - i);
       const bi = BOTTLES[i], bj = BOTTLES[i + 1];
       const a = profiles[i], b = profiles[i + 1];
       for (let k = 0; k < blend.length; k++) blend[k] = a[k] + (b[k] - a[k]) * f;
       writeLathe(geo, blend);
-      lastShape = state.stage;
+      lastShape = shape;
       const lerp = (x, y) => x + (y - x) * f;
       const H = lerp(bi.H, bj.H) * MM, nr = (lerp(bi.neck, bj.neck) / 2) * MM;
       const capH = Math.max(0.12, nr * 1.25);
@@ -283,5 +305,14 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced }) {
     renderer.render(B.scene, bCam);
   }
 
-  return { setStage, setPointer, setVisible, frame, resize, setQuality, dispose };
+  // Compile shaders without blocking the page, then draw once, so the first visible frame is instant.
+  // The shadow and refraction passes only compile on a real draw, so draw once here too (the
+  // canvas is still off screen), keeping that one-off cost out of the visitor's first look.
+  async function warm() {
+    try { if (renderer.compileAsync && renderer.extensions.has("KHR_parallel_shader_compile")) await renderer.compileAsync(B.scene, bCam); } catch { /* compiled by the draw below */ }
+    const was = state.visible;
+    state.visible = true; frame(0.016); state.visible = was;
+  }
+
+  return { setStage, setPointer, setVisible, frame, resize, setQuality, dispose, warm };
 }

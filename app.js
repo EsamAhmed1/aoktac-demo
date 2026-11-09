@@ -12,8 +12,11 @@ const lowPower = (navigator.hardwareConcurrency || 8) <= 4 || Math.min(innerWidt
 const saveData = navigator.connection && (navigator.connection.saveData || /(^|-)2g$/.test(navigator.connection.effectiveType || ""));
 
 /* ---------- Smooth scroll ---------- */
+// Wheel and trackpad only. Touch devices keep native scrolling, which is smoother on phones and
+// leaves sideways swiping in the sectors slider entirely to the browser.
+const touchFirst = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
 let lenis = null;
-if (!reduceMotion && window.Lenis) {
+if (!reduceMotion && !touchFirst && window.Lenis) {
   lenis = new window.Lenis({ lerp: 0.11, smoothWheel: true });
   window.lenis = lenis;
 }
@@ -123,77 +126,136 @@ class Scrub {
 }
 
 // The same film as a numbered image sequence drawn to a canvas. Used where scrubbing a <video>
-// is unreliable (Safari, and every phone and tablet): there is no seeking or decoding to wait
-// on, so the picture tracks the scroll exactly. Frames load coarse-to-fine (every 16th first).
-const touchFirst = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+// is unreliable (Safari, and every phone and tablet): there is no seeking, so the picture
+// tracks the scroll exactly.
+//  - Frames download compressed, coarse to fine (every 16th first); frames the visitor is about
+//    to reach jump the queue.
+//  - Only frames near the current position are decoded, ahead of the scroll direction and off the
+//    main thread (createImageBitmap), so drawing never waits on a decode and memory stays small.
+//  - Each draw blends the two frames either side of the exact position, so even a very slow
+//    scroll moves continuously instead of stepping from frame to frame.
 const useFrames = !blobVideo || touchFirst;
+const AHEAD = 10, BEHIND = 4, KEEP = 20;
 class FrameScrub {
-  constructor(canvas, duration, fps) {
-    this.canvas = canvas; this.ctx = canvas.getContext("2d");
-    this.duration = duration; this.fps = fps;
-    this.ready = false; this.shown = 0; this.dir = ""; this.frames = [];
-    this.ox = 50; this.pan = false; this.drawn = null; this.sig = "";
+  constructor(canvas, duration) {
+    this.canvas = canvas; this.ctx = canvas.getContext("2d", { alpha: false });
+    this.duration = duration; this.fps = 10;
+    this.ready = false; this.shown = 0; this.dir = ""; this.count = 0;
+    this.ox = 50; this.pan = false; this.sig = "";
     this.retired = false; this.onReady = null;
+    this.blobs = []; this.bitmaps = new Map(); this.decoding = new Set(); this.heading = 1;
+    this.urgent = []; this.queue = []; this.inflight = 0;
+  }
+  free() {
+    for (const b of this.bitmaps.values()) b.close?.();
+    this.bitmaps.clear(); this.decoding.clear();
   }
   // Hand over to the full video: stop fetching frames and fade the canvas out over it.
   retire() {
     this.retired = true;
     this.canvas.classList.remove("is-ready");
+    setTimeout(() => this.free(), 600);
   }
   load(dir, count, pan = false) {
     if (reduceMotion || saveData || this.retired || dir === this.dir) return;
-    this.dir = dir; this.pan = pan; this.count = count;
-    this.frames = new Array(count); this.ready = false; this.drawn = null;
+    this.free();
+    this.dir = dir; this.pan = pan; this.count = count; this.fps = count / this.duration;
+    this.blobs = new Array(count); this.ready = false; this.sig = "";
     this.canvas.classList.remove("is-ready");
     const order = [0, count - 1], seen = new Set(order);
     for (const stride of [16, 8, 4, 2, 1]) for (let i = 0; i < count; i += stride) if (!seen.has(i)) { seen.add(i); order.push(i); }
-    const firstPass = Math.ceil(count / 16) + 1;
-    let next = 0, loaded = 0;
-    const pump = () => {
-      if (this.dir !== dir || this.retired || next >= order.length) return;
-      const i = order[next++], img = new Image();
-      img.decoding = "async";
-      img.onload = () => {
-        // Decode off the main thread before the frame can be drawn, so drawing never stalls.
-        (img.decode ? img.decode() : Promise.resolve()).catch(() => {}).then(() => {
-          if (this.dir !== dir || this.retired) return;
-          this.frames[i] = img;
-          if (++loaded >= firstPass && !this.ready) { this.ready = true; this.canvas.classList.add("is-ready"); this.onReady?.(); }
-          pump();
-        });
-      };
-      img.onerror = pump;
-      img.src = `${dir}${String(i).padStart(3, "0")}.webp`;
-    };
-    for (let k = 0; k < 6; k++) pump();
+    this.queue = order; this.urgent = []; this.inflight = 0;
+    for (let k = 0; k < 6; k++) this.pump(dir);
   }
-  nearest(i) {
-    for (let d = 0; d < this.count; d++) {
-      if (this.frames[i - d]) return this.frames[i - d];
-      if (this.frames[i + d]) return this.frames[i + d];
+  pump(dir) {
+    if (this.dir !== dir || this.retired) return;
+    let i;
+    while (this.urgent.length && (i === undefined || this.blobs[i] !== undefined)) i = this.urgent.shift();
+    while ((i === undefined || this.blobs[i] !== undefined) && this.queue.length) i = this.queue.shift();
+    if (i === undefined || this.blobs[i] !== undefined) return;
+    this.blobs[i] = null;                       // requested
+    this.inflight++;
+    fetch(`${dir}${String(i).padStart(3, "0")}.webp`)
+      .then((r) => (r.ok ? r.blob() : null))
+      .catch(() => null)
+      .then((blob) => {
+        this.inflight--;
+        if (this.dir !== dir) return;
+        this.blobs[i] = blob || undefined;
+        this.pump(dir);
+      });
+  }
+  decode(i) {
+    if (i < 0 || i >= this.count || this.bitmaps.has(i) || this.decoding.has(i)) return;
+    const blob = this.blobs[i];
+    if (!blob) {
+      if (blob === undefined && !this.urgent.includes(i)) { this.urgent.push(i); if (this.inflight < 6) this.pump(this.dir); }
+      return;
     }
-    return null;
+    if (this.decoding.size >= 3) return;
+    this.decoding.add(i);
+    const dir = this.dir;
+    const done = (bm) => {
+      this.decoding.delete(i);
+      if (this.dir !== dir || this.retired) { bm?.close?.(); return; }
+      if (bm) this.bitmaps.set(i, bm);
+    };
+    if (window.createImageBitmap) createImageBitmap(blob).then(done, () => done(null));
+    else { const img = new Image(); img.src = URL.createObjectURL(blob); img.decode().then(() => done(img), () => done(null)); }
+  }
+  // Before anything is on screen, start from the closest frame already downloaded; the exact
+  // frames replace it a moment later.
+  firstPicture(i0) {
+    let best = null, bestD = Infinity;
+    for (const [k, bm] of this.bitmaps) { const d = Math.abs(k - i0); if (d < bestD) { best = bm; bestD = d; } }
+    if (bestD > 1) for (let d = 0; d < this.count; d++) {
+      if (this.blobs[i0 - d]) { this.decode(i0 - d); break; }
+      if (this.blobs[i0 + d]) { this.decode(i0 + d); break; }
+    }
+    return best;
+  }
+  // Keep decoded frames around the position, weighted toward where the scroll is heading.
+  keepWindow(pos) {
+    const c = Math.floor(pos), h = this.heading;
+    this.decode(c); this.decode(c + 1);
+    for (let d = 1; d <= AHEAD; d++) this.decode(c + 1 + d * h);
+    for (let d = 1; d <= BEHIND; d++) this.decode(c - d * h);
+    for (const [k, b] of this.bitmaps) if (Math.abs(k - c) > KEEP) { b.close?.(); this.bitmaps.delete(k); }
   }
   step(target, dt) {
+    const before = this.shown;
     this.shown += (target - this.shown) * (reduceMotion ? 1 : 1 - Math.exp(-dt * 9));
-    if (Math.abs(target - this.shown) < 0.004) this.shown = target;
-    if (!this.ready || this.retired) return this.shown;
-    const img = this.nearest(clamp(Math.round(this.shown * this.fps), 0, this.count - 1));
-    const c = this.canvas;
-    if (!img) return this.shown;
+    if (Math.abs(target - this.shown) < 0.002) this.shown = target;
+    if (!this.count || this.retired) return this.shown;
+    if (this.shown !== before) this.heading = this.shown > before ? 1 : -1;
+    const pos = clamp(this.shown * this.fps, 0, this.count - 1);
+    this.keepWindow(pos);
+    const i0 = Math.floor(pos), f = pos - i0;
+    let a = this.bitmaps.get(i0), b = this.bitmaps.get(i0 + 1), mix = f;
+    if (!a || !b) {
+      // Not decoded yet (a fast jump): hold the last picture rather than show a far-off frame.
+      a = a || b || this.bitmaps.get(i0 - 1) || this.bitmaps.get(i0 + 2);
+      b = null;
+      if (!a && !this.ready) a = this.firstPicture(i0);   // nothing on screen yet: nearest frame we have
+      if (!a) return this.shown;
+    }
+    const c = this.canvas, iw = a.width, ih = a.height;
     // Never draw finer than the frames themselves: more canvas pixels would add cost, not detail.
-    const fit = Math.max(c.clientWidth / img.naturalWidth, c.clientHeight / img.naturalHeight);
+    const fit = Math.max(c.clientWidth / iw, c.clientHeight / ih);
     const dpr = clamp(1 / fit, 1, Math.min(devicePixelRatio || 1, 2));
     const w = Math.round(c.clientWidth * dpr), h = Math.round(c.clientHeight * dpr);
     const ox = this.pan ? this.ox : 50;
-    const sig = `${w}x${h}:${ox.toFixed(1)}`;
-    if (img !== this.drawn || sig !== this.sig) {
-      if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
-      // cover-fit, with the same horizontal focus as CSS object-position
-      const s = Math.max(w / img.naturalWidth, h / img.naturalHeight), dw = img.naturalWidth * s, dh = img.naturalHeight * s;
-      this.ctx.drawImage(img, (w - dw) * ox / 100, (h - dh) / 2, dw, dh);
-      this.drawn = img; this.sig = sig;
-    }
+    const sig = `${w}x${h}:${ox.toFixed(1)}:${i0}:${b ? Math.round(mix * 48) : -1}`;
+    if (sig === this.sig) return this.shown;
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    // cover-fit, with the same horizontal focus as CSS object-position
+    const s = Math.max(w / iw, h / ih), dw = iw * s, dh = ih * s, x = (w - dw) * ox / 100, y = (h - dh) / 2;
+    const ctx = this.ctx;
+    ctx.globalAlpha = 1;
+    ctx.drawImage(a, x, y, dw, dh);
+    if (b && mix > 0.01) { ctx.globalAlpha = mix; ctx.drawImage(b, x, y, dw, dh); ctx.globalAlpha = 1; }
+    this.sig = sig;
+    if (!this.ready) { this.ready = true; c.classList.add("is-ready"); this.onReady?.(); }
     return this.shown;
   }
 }
@@ -203,7 +265,7 @@ class FrameScrub {
 // full 24 fps video then downloads in the background and takes over at the same moment of the
 // film; everywhere else the frames stay.
 function filmPlayer(canvas, video, duration) {
-  const frames = new FrameScrub(canvas, duration, 10);
+  const frames = new FrameScrub(canvas, duration);
   const full = useFrames ? null : new Scrub(video, duration);
   return {
     frames, full, duration,
@@ -273,8 +335,8 @@ const liteVideo = innerWidth < 1100 || lowPower || slowNet;
 // get 1600x900 frames panned on the canvas.
 const filmVideoSrc = liteVideo ? "assets/film/film-1920-lite.mp4" : "assets/film/film-1920.mp4";
 const filmFrames = () => innerWidth / innerHeight < 0.8
-  ? filmScrub.load("assets/film/frames/hero-p/", 221, false, filmVideoSrc)
-  : filmScrub.load("assets/film/frames/hero-l/", 221, true, filmVideoSrc);
+  ? filmScrub.load("assets/film/frames/hero-p/", 332, false, filmVideoSrc)
+  : filmScrub.load("assets/film/frames/hero-l/", 332, true, filmVideoSrc);
 addEventListener("resize", () => { if (filmScrub.frames.dir) filmFrames(); });
 // Start as soon as the page is parsed rather than after every image has loaded.
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", filmFrames, { once: true }); else filmFrames();
@@ -353,12 +415,14 @@ async function initShowcase() {
   showcaseLoading = true;
   try {
     const { createShowcase } = await import("./showcase3d.js");
-    showcase = createShowcase({
+    const sc = createShowcase({
       canvas: $(".show__canvas", showSec),
       bottleSlot: $("[data-slot=bottle]", showSec),
       lowPower,
       reduced: reduceMotion,
     });
+    await sc.warm();
+    showcase = sc;
   } catch (err) {
     console.warn("3D showcase unavailable", err);
     showSec.classList.add("no-webgl");
@@ -405,9 +469,13 @@ function watchShowcase(now) {
   if (watch.level === 0) { watch.level = 1; showcase.setQuality(1); watch.warm = 0; }
   else retireShowcase();
 }
+// The 3D scene is built at the first pause in scrolling (usually right after the page loads), or at
+// the latest one screen away, so its one-off setup never lands in the middle of a scroll.
+let lastScrollAt = 0;
+addEventListener("scroll", () => { lastScrollAt = performance.now(); }, { passive: true });
 function paintShow(dt) {
   const near = nearView(showSec, 1);
-  if (near) initShowcase();
+  if (near || (document.readyState === "complete" && performance.now() - lastScrollAt > 250)) initShowcase();
   if (!near && !showcase) return;
   const target = stageFromProgress(progressOf(showSec));
   showStageVal += (target - showStageVal) * (reduceMotion ? 1 : 1 - Math.exp(-dt * 8));
@@ -452,7 +520,14 @@ function layoutHz() {
   hzRun = Math.max(0, hzTrack.scrollWidth - innerWidth);
   hz.style.height = `${innerHeight + hzRun / 0.92}px`;
 }
+// Load every sector photo once the section is near. Lazy images inside a sideways scroller only
+// start when swiped into view on iPhone, which would show blank cards mid-swipe.
+let hzWarm = false;
 function paintHz() {
+  if (!hzWarm && nearView(hz, 1.5)) {
+    hzWarm = true;
+    for (const img of $$("img", hz)) { img.loading = "eager"; img.decode?.().catch(() => {}); }
+  }
   if (hzSwipe) {
     const max = hzTrack.scrollWidth - hzTrack.clientWidth;
     hzBar.style.setProperty("--hp", max > 0 ? (hzTrack.scrollLeft / max).toFixed(3) : "0");

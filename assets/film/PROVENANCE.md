@@ -51,10 +51,12 @@ Only the 2 L and 30 L pairings are backed by Aoktac's product pages. The 5 L and
 
 ## Round 5 (2026-11-10): image-sequence frames
 
-assets/film/frames/ holds the same two films as numbered WebP stills at 10 frames per second, extracted with ffmpeg from the shipped encodes (no new generation):
-- hero-l/ 221 frames, 1600x900, from film-1920.mp4 (Lanczos, WebP q72)
-- hero-p/ 221 frames, 608x1080 crops of film-1920.mp4 at native resolution, panned with the page's FOCUS curve (WebP q74)
+assets/film/frames/ holds the same two films as numbered WebP stills (hero 15 fps, factory 10 fps), extracted with ffmpeg from the shipped encodes (no new generation):
+- hero-l/ 332 frames at 15 fps, 1600x900, from film-1920.mp4 (Lanczos, WebP q70)
+- hero-p/ 332 frames at 15 fps, 608x1080 crops of film-1920.mp4 at native resolution, panned with the page's FOCUS curve (WebP q70)
 - fac-l/ 100 frames, 1600x900, from factory-1920.mp4 (WebP q72)
 - fac-p/ 100 frames, 720x1280, from factory-1080p.mp4 (WebP q74)
 
 Safari, iPhone, iPad and other touch devices scrub these frames on a canvas; desktop Chrome, Edge and Firefox start on them and hand over to the full video once it has downloaded.
+
+The player blends each pair of neighbouring frames by the exact scroll position, so motion stays continuous between frames.

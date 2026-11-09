@@ -266,7 +266,8 @@ p { margin: 0; }
   scroll-padding-inline: var(--gutter);
 }
 .hz.is-swipe .hz__track::-webkit-scrollbar { display: none; }
-.hz.is-swipe .hz__panel { height: auto; width: min(84vw, 620px); scroll-snap-align: start; }
+/* One card per swipe: a fast flick stops at the next card instead of skipping several */
+.hz.is-swipe .hz__panel { height: auto; width: min(84vw, 620px); scroll-snap-align: start; scroll-snap-stop: always; }
 .hz.is-swipe .hz__stage > .hz__panel--intro { width: auto; height: auto; padding: 72px var(--gutter) 0; gap: .9rem; }
 .hz.is-swipe .hz__track { padding-top: 28px; }
 
