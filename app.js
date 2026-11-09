@@ -66,23 +66,44 @@ function show(el, a, lift = 14) {
   el.inert = a < 0.5;
 }
 
-// A video scrubbed by scroll. Whole file is fetched once so every seek is instant.
+// WebKit (Safari, and every browser on iPhone and iPad) refuses video from blob: URLs,
+// so there the film streams from its own URL instead of a downloaded copy.
+const ua = navigator.userAgent;
+const blobVideo = !(/AppleWebKit/.test(ua) && !/(Chrome|Chromium|Edg|OPR)\//.test(ua));
+
+// A video scrubbed by scroll. Where blob video works the whole file is fetched once so every
+// seek is instant; anywhere it fails, the file streams directly.
 class Scrub {
   constructor(video, duration) { this.video = video; this.duration = duration; this.ready = false; this.shown = 0; this.loading = false; }
+  attach(url) {
+    const v = this.video;
+    return new Promise((done) => {
+      const finish = (ok) => { v.removeEventListener("loadeddata", yes); v.removeEventListener("error", no); done(ok); };
+      const yes = () => finish(true), no = () => finish(false);
+      v.addEventListener("loadeddata", yes);
+      v.addEventListener("error", no);
+      v.preload = "auto";
+      v.src = url;
+      v.load();
+      // iOS decodes nothing until a video has played once; a muted inline play is allowed.
+      if (!url.startsWith("blob:")) v.play()?.then(() => v.pause()).catch(() => {});
+    });
+  }
   async load(src) {
     if (this.loading || reduceMotion || saveData) return;
     this.loading = true;
-    let blob = null;
-    for (let i = 0; i < 2 && !blob; i++) {
-      try { const r = await fetch(src); if (r.ok) blob = await r.blob(); } catch { /* retry once */ }
+    let ok = false;
+    if (blobVideo) {
+      let blob = null;
+      for (let i = 0; i < 2 && !blob; i++) {
+        try { const r = await fetch(src); if (r.ok) blob = await r.blob(); } catch { /* retry once */ }
+      }
+      // An untyped blob is refused by Firefox's media sniffer, so label it.
+      if (blob) ok = await this.attach(URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: "video/mp4" })));
     }
-    if (!blob) return;
+    if (!ok) ok = await this.attach(src);
+    if (!ok) return;
     const v = this.video;
-    v.src = URL.createObjectURL(blob);
-    v.load();
-    try {
-      await new Promise((ok, fail) => { v.addEventListener("loadeddata", ok, { once: true }); v.addEventListener("error", fail, { once: true }); });
-    } catch { return; }
     v.pause();
     this.duration = v.duration || this.duration;
     v.currentTime = clamp(this.shown, 0, this.duration - 0.05);
@@ -166,8 +187,21 @@ const ui = {
   bph: $("#show-bph"), cta: $("#show-cta"), credit: $("#show-credit"),
   stops: $$(".show__scale button", showSec), bottleImg: $(".show__bottle-img", showSec), photos: $$(".show__photo", showSec),
 };
-let showcase = null, showcaseLoading = false, showIndex = -1, showStageVal = 0;
-const hasWebGL = (() => { try { const c = document.createElement("canvas"); return !!(c.getContext("webgl2") || c.getContext("webgl")); } catch { return false; } })();
+let showcase = null, showcaseLoading = false, showcaseRetired = false, showIndex = -1, showStageVal = 0;
+// Software WebGL (hardware acceleration off, virtual machines, blocklisted GPUs) draws the
+// glass bottle at a few frames a second and stalls the whole page, so it gets the images.
+const gpuName = (() => {
+  try {
+    const gl = document.createElement("canvas").getContext("webgl2") || document.createElement("canvas").getContext("webgl");
+    if (!gl) return null;
+    // Firefox reports the real renderer directly; Chromium and WebKit need the debug extension.
+    const plain = String(gl.getParameter(gl.RENDERER) || "");
+    if (!/^(WebKit WebGL|Mozilla)$/i.test(plain)) return plain;
+    const info = gl.getExtension("WEBGL_debug_renderer_info");
+    return info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : plain;
+  } catch { return null; }
+})();
+const hasWebGL = gpuName !== null && !/swiftshader|llvmpipe|softpipe|software|basic render/i.test(gpuName);
 if (!hasWebGL) showSec.classList.add("no-webgl");
 
 // Scroll progress holds on each size, then moves to the next.
@@ -199,7 +233,7 @@ function setShowIndex(i) {
   }
 }
 async function initShowcase() {
-  if (showcase || showcaseLoading || !hasWebGL) return;
+  if (showcase || showcaseLoading || showcaseRetired || !hasWebGL) return;
   showcaseLoading = true;
   try {
     const { createShowcase } = await import("./showcase3d.js");
@@ -232,6 +266,29 @@ function paintPhotos(stage) {
     img.style.visibility = ro > 0 ? "visible" : "hidden";
   });
 }
+// Frame-time watchdog for the 3D bottle. Slow frames first drop it to lighter rendering,
+// then to the pre-rendered bottle images, so scrolling never stalls on a weak GPU.
+const watch = { last: 0, n: 0, sum: 0, warm: 0, level: 0 };
+function retireShowcase() {
+  showcase.dispose();
+  showcase = null;
+  showcaseRetired = true;
+  showSec.classList.add("no-webgl");
+  showIndex = -1;
+}
+function watchShowcase(now) {
+  const gap = now - watch.last;
+  watch.last = now;
+  if (gap > 1000 || ++watch.warm < 20) return;      // skip shader compiles and returns from a hidden tab
+  watch.n++; watch.sum += gap;
+  const avg = watch.sum / watch.n;
+  if (watch.n >= 10 && avg > 120) return retireShowcase();
+  if (watch.n < 40) return;
+  watch.n = 0; watch.sum = 0;
+  if (avg < 26) return;
+  if (watch.level === 0) { watch.level = 1; showcase.setQuality(1); watch.warm = 0; }
+  else retireShowcase();
+}
 function paintShow(dt) {
   const near = nearView(showSec, 1);
   if (near) initShowcase();
@@ -244,7 +301,7 @@ function paintShow(dt) {
     const visible = nearView(showSec, 0.05);
     showcase.setVisible(visible);
     showcase.setStage(showStageVal);
-    if (visible) showcase.frame(dt);
+    if (visible) { showcase.frame(dt); watchShowcase(performance.now()); } else watch.warm = 0;
   }
 }
 if (canHover && !reduceMotion) {

@@ -213,6 +213,24 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced }) {
   }
   function resize() { renderer.setSize(canvas.clientWidth, canvas.clientHeight, false); }
   window.addEventListener("resize", resize);
+
+  // Reduced quality for slow GPUs: 1x pixels, half-resolution refraction, no soft shadow map
+  // (the contact blob stays). app.js calls this when frames run long.
+  function setQuality(level) {
+    if (level >= 1) {
+      renderer.setPixelRatio(1);
+      if ("transmissionResolutionScale" in renderer) renderer.transmissionResolutionScale = 0.5;
+      renderer.shadowMap.enabled = false;
+      bottle.castShadow = false; cap.castShadow = false;
+      pet.needsUpdate = true; capMat.needsUpdate = true;
+      resize();
+    }
+  }
+  function dispose() {
+    window.removeEventListener("resize", resize);
+    renderer.dispose();
+    renderer.forceContextLoss();
+  }
   resize();
 
   function setStage(s) { state.stage = s; }
@@ -265,5 +283,5 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced }) {
     renderer.render(B.scene, bCam);
   }
 
-  return { setStage, setPointer, setVisible, frame, resize };
+  return { setStage, setPointer, setVisible, frame, resize, setQuality, dispose };
 }
