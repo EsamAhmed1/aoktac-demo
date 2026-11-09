@@ -352,8 +352,8 @@ function paintHz() {
     const img = panel.querySelector(".hz__media img");
     if (!img) continue;
     const r = panel.getBoundingClientRect();
-    const off = ((r.left + r.width / 2) - innerWidth / 2) / innerWidth;
-    img.style.setProperty("--sx", `${(-off * 40).toFixed(1)}px`);
+    const off = clamp(((r.left + r.width / 2) - innerWidth / 2) / innerWidth, -0.6, 0.6);
+    img.style.setProperty("--sx", `${(-off * 0.045 * r.width).toFixed(1)}px`);   // drift scales with the card, inside its bleed
   }
 }
 if (canHover && !reduceMotion) {
@@ -361,8 +361,8 @@ if (canHover && !reduceMotion) {
     const img = panel.querySelector("img");
     panel.addEventListener("pointermove", (e) => {
       const r = panel.getBoundingClientRect();
-      img.style.setProperty("--px", `${(((e.clientX - r.left) / r.width) - 0.5) * -18}px`);
-      img.style.setProperty("--py", `${(((e.clientY - r.top) / r.height) - 0.5) * -14}px`);
+      img.style.setProperty("--px", `${(((e.clientX - r.left) / r.width) - 0.5) * -0.025 * r.width}px`);
+      img.style.setProperty("--py", `${(((e.clientY - r.top) / r.height) - 0.5) * -0.015 * r.height}px`);
     });
     panel.addEventListener("pointerleave", () => { img.style.setProperty("--px", "0px"); img.style.setProperty("--py", "0px"); });
   }
@@ -425,6 +425,10 @@ const emailIn = $("#q-email");
 const emailOk = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 nameIn.addEventListener("blur", () => nameIn.value && check(nameIn, "q-name-err", (v) => v.length > 1));
 emailIn.addEventListener("blur", () => emailIn.value && check(emailIn, "q-email-err", emailOk));
+// A flagged field re-checks as it is corrected, so its error clears while typing. Clearing it
+// on blur instead would shift the send button mid-tap and the tap would miss.
+nameIn.addEventListener("input", () => nameIn.getAttribute("aria-invalid") === "true" && check(nameIn, "q-name-err", (v) => v.length > 1));
+emailIn.addEventListener("input", () => emailIn.getAttribute("aria-invalid") === "true" && check(emailIn, "q-email-err", emailOk));
 form.addEventListener("submit", (e) => {
   e.preventDefault();
   const a = check(nameIn, "q-name-err", (v) => v.length > 1);

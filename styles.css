@@ -78,6 +78,8 @@ p { margin: 0; }
   display: flex; align-items: center; gap: 2rem;
   background: var(--hall); border-bottom: 1px solid var(--steel);
 }
+/* Logo keeps its size; the link around it gets a 44px-tall tap area */
+.bar__brand { display: inline-flex; align-items: center; min-height: 44px; }
 .bar__brand img { height: 24px; width: auto; }
 .bar__nav { display: flex; gap: 1.7rem; margin-left: auto; }
 .bar__nav a, .bar__lang { color: var(--ink); text-decoration: none; font-size: .9375rem; }
@@ -219,12 +221,14 @@ p { margin: 0; }
   padding: calc(var(--bar-h) + 28px) var(--gutter) 64px;
   will-change: transform;
 }
-/* Every sector card follows the Beverage card: one width, one padding, one headline size. */
-.hz { --card-w: clamp(320px, 52vw, 900px); --card-pad: clamp(20px, 2.2vw, 36px); --word: clamp(4.5rem, 10.42vw, 9.375rem); }
-.hz__panel { position: relative; flex: 0 0 auto; height: 100%; width: var(--card-w); margin: 0; }
+/* Every sector card has the reference proportions (900 x 1150 at full size): a fixed portrait
+   shape, with the headline, inset and note sized from the card itself. The composition is then
+   identical on every screen, browser and zoom level; the headline is 150px on a full-size card. */
+.hz { --card-ratio: 0.783; --card-pad: 4cqw; --word: 16.67cqw; }
+.hz__panel { position: relative; flex: 0 0 auto; height: 100%; aspect-ratio: var(--card-ratio); max-width: 900px; margin: 0; container-type: inline-size; }
 .hz__media { position: absolute; inset: 0; overflow: hidden; border-radius: 2px; background: var(--ink-2); }
 
-.hz__panel--intro { width: clamp(300px, 34vw, 560px); display: flex; flex-direction: column; justify-content: flex-end; gap: 1.2rem; padding: 0 2rem 1rem 0; overflow: visible; }
+.hz__panel--intro { aspect-ratio: auto; container-type: normal; width: clamp(300px, 34vw, 560px); display: flex; flex-direction: column; justify-content: flex-end; gap: 1.2rem; padding: 0 2rem 1rem 0; overflow: visible; }
 .hz__title { font-size: clamp(2.4rem, 4.4vw, 4.6rem); letter-spacing: -0.045em; }
 .hz__title em { color: var(--pet); }
 .hz__lede { color: var(--on-ink-2); max-width: 24rem; }
@@ -235,12 +239,15 @@ p { margin: 0; }
 }
 .hz__panel figcaption {
   position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between;
-  padding: var(--card-pad); border-radius: 2px;
+  padding: clamp(14px, var(--card-pad), 36px); border-radius: 2px;
   background: linear-gradient(180deg, rgba(11, 30, 51, .5) 0%, rgba(11, 30, 51, 0) 34%, rgba(11, 30, 51, 0) 62%, rgba(11, 30, 51, .58) 100%);
 }
-/* 150px on desktop (10.42vw at 1440), set from the same inset as the note below it */
+/* 16.67% of the card width: 150px on a full-size 900px card, set from the same inset as the note below it */
 .hz__word { position: relative; z-index: 3; font-family: var(--f-sans); font-size: var(--word); font-weight: 500; letter-spacing: -0.05em; line-height: .88; margin: -.08em 0 0 -.04em; white-space: nowrap; color: var(--on-ink); text-shadow: 0 2px 30px rgba(11, 30, 51, .25); pointer-events: none; }
-.hz__note { font-size: 1rem; font-weight: 500; line-height: 1.3; max-width: 24rem; }
+.hz__note { font-size: clamp(.875rem, 1.78cqw, 1rem); font-weight: 500; line-height: 1.3; max-width: 24rem; }
+/* Older browsers without container units or aspect-ratio keep the previous fluid sizing */
+@supports not (width: 1cqw) { .hz { --card-pad: clamp(20px, 2.2vw, 36px); --word: clamp(4.5rem, 10.42vw, 9.375rem); } .hz.is-swipe { --word: clamp(3rem, 13vw, 6.5rem); } }
+@supports not (aspect-ratio: 1) { .hz__panel:not(.hz__panel--intro) { width: clamp(320px, 52vw, 900px); } .hz.is-swipe .hz__panel:not(.hz__panel--intro) { height: min(68svh, 600px); } }
 .hz__progress { position: absolute; left: var(--gutter); right: var(--gutter); bottom: 28px; height: 1px; background: rgba(255, 255, 255, .22); }
 .hz__progress span { display: block; height: 100%; background: #fff; transform-origin: left; transform: scaleX(var(--hp, 0)); }
 
@@ -254,8 +261,7 @@ p { margin: 0; }
   scroll-padding-inline: var(--gutter);
 }
 .hz.is-swipe .hz__track::-webkit-scrollbar { display: none; }
-.hz.is-swipe { --card-w: min(84vw, 620px); --card-pad: clamp(16px, 3vw, 28px); --word: clamp(3rem, 13vw, 6.5rem); }
-.hz.is-swipe .hz__panel { height: min(68svh, 600px); scroll-snap-align: start; }
+.hz.is-swipe .hz__panel { height: auto; width: min(84vw, 620px); scroll-snap-align: start; }
 .hz.is-swipe .hz__stage > .hz__panel--intro { width: auto; height: auto; padding: 72px var(--gutter) 0; gap: .9rem; }
 .hz.is-swipe .hz__track { padding-top: 28px; }
 
