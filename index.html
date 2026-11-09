@@ -96,18 +96,18 @@
   <!-- 2. 3D bottle and machine showcase (scroll-driven sizes) -->
   <section class="show" id="machines" aria-labelledby="show-title">
     <div class="show__stage">
-      <canvas class="show__canvas" aria-hidden="true"></canvas>
       <div class="show__grid">
         <div class="show__bottle" data-slot="bottle">
+          <canvas class="show__canvas" aria-hidden="true"></canvas>
           <img class="show__fallback show__bottle-img" src="assets/img/bottle-0.webp" alt="" width="700" height="900" loading="lazy">
         </div>
         <div class="show__machine">
           <div class="show__photos">
-            <img class="show__photo show__photo--0" src="assets/img/machine-0.webp" alt="Aoktac two-step machine with its panels off: preform oven and blow station" width="1322" height="1001" loading="lazy" decoding="async">
-            <img class="show__photo show__photo--1" src="assets/img/machine-1.webp" alt="TEC BLOW RL-6II stretch blow molding machine" width="939" height="672" loading="lazy" decoding="async" aria-hidden="true">
-            <img class="show__photo show__photo--2" src="assets/img/machine-2.webp" alt="AOK-2000 NEW TEC blow molding machine" width="669" height="818" loading="lazy" decoding="async" aria-hidden="true">
-            <img class="show__photo show__photo--3" src="assets/img/machine-3.webp" alt="Aoktac one-step injection stretch blow molding machine" width="815" height="782" loading="lazy" decoding="async" aria-hidden="true">
-            <img class="show__photo show__photo--4" src="assets/img/machine-4.webp" alt="Large-container TEC BLOW machine with preform loader" width="1065" height="587" loading="lazy" decoding="async" aria-hidden="true">
+            <img class="show__photo show__photo--0" src="assets/img/machine-0.webp" srcset="assets/img/machine-0-800.webp 800w, assets/img/machine-0.webp 1322w" sizes="(max-width: 900px) 260px, 50vw" alt="Aoktac two-step machine with its panels off: preform oven and blow station" width="1322" height="1001" loading="lazy" decoding="async">
+            <img class="show__photo show__photo--1" src="assets/img/machine-1.webp" srcset="assets/img/machine-1-800.webp 800w, assets/img/machine-1.webp 939w" sizes="(max-width: 900px) 260px, 50vw" alt="TEC BLOW RL-6II stretch blow molding machine" width="939" height="672" loading="lazy" decoding="async" aria-hidden="true">
+            <img class="show__photo show__photo--2" src="assets/img/machine-2.webp" srcset="assets/img/machine-2-800.webp 669w, assets/img/machine-2.webp 669w" sizes="(max-width: 900px) 260px, 50vw" alt="AOK-2000 NEW TEC blow molding machine" width="669" height="818" loading="lazy" decoding="async" aria-hidden="true">
+            <img class="show__photo show__photo--3" src="assets/img/machine-3.webp" srcset="assets/img/machine-3-800.webp 800w, assets/img/machine-3.webp 815w" sizes="(max-width: 900px) 260px, 50vw" alt="Aoktac one-step injection stretch blow molding machine" width="815" height="782" loading="lazy" decoding="async" aria-hidden="true">
+            <img class="show__photo show__photo--4" src="assets/img/machine-4.webp" srcset="assets/img/machine-4-800.webp 800w, assets/img/machine-4.webp 1065w" sizes="(max-width: 900px) 260px, 50vw" alt="Large-container TEC BLOW machine with preform loader" width="1065" height="587" loading="lazy" decoding="async" aria-hidden="true">
           </div>
         </div>
       </div>
@@ -150,28 +150,29 @@
           <h2 id="sectors-title" class="hz__title">Bottles for food, drink <em>and the home.</em></h2>
           <p class="hz__lede">PET, PC, PP, PE and HDPE, from single machines to turnkey lines.</p>
         </div>
+        <!-- Phones get the 900px photos (sharp at card size, a third of the memory); the sizes hint is set so 3x screens pick them too -->
         <figure class="hz__panel" data-tilt>
-          <div class="hz__media"><img src="assets/img/sector-beverage-hd.webp" alt="Clear PET drink bottles with coloured caps" width="1600" height="1216" loading="lazy"></div>
+          <div class="hz__media"><img src="assets/img/sector-beverage-hd.webp" srcset="assets/img/sector-beverage-900.webp 900w, assets/img/sector-beverage-hd.webp 1600w" sizes="(max-width: 900px) 300px, 900px" alt="Clear PET drink bottles with coloured caps" width="1600" height="1216" loading="lazy"></div>
           <figcaption><span class="hz__word">Beverage</span><span class="hz__note">Plastic bottles for liquid packaging</span></figcaption>
         </figure>
         <figure class="hz__panel" data-tilt>
-          <div class="hz__media"><img src="assets/img/sector-dairy-hd.webp" alt="A white milk bottle taken from a supermarket shelf" width="1600" height="1216" loading="lazy"></div>
+          <div class="hz__media"><img src="assets/img/sector-dairy-hd.webp" srcset="assets/img/sector-dairy-900.webp 900w, assets/img/sector-dairy-hd.webp 1600w" sizes="(max-width: 900px) 300px, 900px" alt="A white milk bottle taken from a supermarket shelf" width="1600" height="1216" loading="lazy"></div>
           <figcaption><span class="hz__word">Dairy</span><span class="hz__note">PET, PE and HDPE</span></figcaption>
         </figure>
         <figure class="hz__panel" data-tilt>
-          <div class="hz__media"><img src="assets/img/sector-food-hd.webp" alt="Clear food jars of dried fruit and beans" width="1600" height="1216" loading="lazy"></div>
+          <div class="hz__media"><img src="assets/img/sector-food-hd.webp" srcset="assets/img/sector-food-900.webp 900w, assets/img/sector-food-hd.webp 1600w" sizes="(max-width: 900px) 300px, 900px" alt="Clear food jars of dried fruit and beans" width="1600" height="1216" loading="lazy"></div>
           <figcaption><span class="hz__word">Food</span><span class="hz__note">PET and PC jars</span></figcaption>
         </figure>
         <figure class="hz__panel hz__panel--oil" data-tilt>
-          <div class="hz__media"><img src="assets/img/sector-oil-hd.webp" alt="Orange and yellow lubricant jerrycans" width="1600" height="1216" loading="lazy"></div>
+          <div class="hz__media"><img src="assets/img/sector-oil-hd.webp" srcset="assets/img/sector-oil-900.webp 900w, assets/img/sector-oil-hd.webp 1600w" sizes="(max-width: 900px) 300px, 900px" alt="Orange and yellow lubricant jerrycans" width="1600" height="1216" loading="lazy"></div>
           <figcaption><span class="hz__word">Oil</span><span class="hz__note">PE and HDPE, oils and lubricants</span></figcaption>
         </figure>
         <figure class="hz__panel" data-tilt>
-          <div class="hz__media"><img src="assets/img/sector-beauty-hd.webp" alt="Pump bottles for shampoo and lotion" width="1600" height="1216" loading="lazy"></div>
+          <div class="hz__media"><img src="assets/img/sector-beauty-hd.webp" srcset="assets/img/sector-beauty-900.webp 900w, assets/img/sector-beauty-hd.webp 1600w" sizes="(max-width: 900px) 300px, 900px" alt="Pump bottles for shampoo and lotion" width="1600" height="1216" loading="lazy"></div>
           <figcaption><span class="hz__word">Beauty</span><span class="hz__note">PLA, PET, PP, PE and HDPE</span></figcaption>
         </figure>
         <figure class="hz__panel" data-tilt>
-          <div class="hz__media"><img src="assets/img/sector-home-hd.webp" alt="Spray and detergent bottles with a scrubbing brush" width="1600" height="1216" loading="lazy"></div>
+          <div class="hz__media"><img src="assets/img/sector-home-hd.webp" srcset="assets/img/sector-home-900.webp 900w, assets/img/sector-home-hd.webp 1600w" sizes="(max-width: 900px) 300px, 900px" alt="Spray and detergent bottles with a scrubbing brush" width="1600" height="1216" loading="lazy"></div>
           <figcaption><span class="hz__word">Home</span><span class="hz__note">PET, PE and HDPE</span></figcaption>
         </figure>
       </div>

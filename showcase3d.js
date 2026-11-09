@@ -189,7 +189,7 @@ function makeStudioScene(env, top, bottom) {
   return { scene, key, blob };
 }
 
-export function createShowcase({ canvas, bottleSlot, lowPower, reduced }) {
+export function createShowcase({ canvas, bottleSlot, lowPower, reduced, spin = true }) {
   // A lighter mesh on phones: identical at that size, and about a third of the work per reshape.
   if (lowPower) { N = 150; SEG = 80; }
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: "high-performance" });
@@ -226,6 +226,7 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced }) {
   const bGroup = new THREE.Group(); bGroup.add(bottle, cap); B.scene.add(bGroup);
 
   const state = { stage: 0, px: 0, py: 0, tx: 0, ty: 0, visible: false, t: 0 };
+  let lastKey = "";
 
   function rectOf(el) {
     const r = el.getBoundingClientRect(), c = canvas.getBoundingClientRect();
@@ -234,7 +235,7 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced }) {
   // The bottle slot sits at a fixed place on the canvas (both live in the pinned stage), so it is
   // measured on resize, not every frame.
   let slot = null;
-  function resize() { renderer.setSize(canvas.clientWidth, canvas.clientHeight, false); slot = rectOf(bottleSlot); }
+  function resize() { renderer.setSize(canvas.clientWidth, canvas.clientHeight, false); slot = rectOf(bottleSlot); lastKey = ""; }
   new ResizeObserver(resize).observe(canvas);
   window.addEventListener("resize", resize);
 
@@ -248,6 +249,7 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced }) {
       bottle.castShadow = false; cap.castShadow = false;
       pet.needsUpdate = true; capMat.needsUpdate = true;
       resize();
+      lastKey = "";
     }
   }
   function dispose() {
@@ -265,7 +267,7 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced }) {
   let lastShape = -1;
   function frame(dt) {
     if (!state.visible) return;
-    if (!reduced) state.t += dt;
+    if (spin && !reduced) state.t += dt;
     state.px += (state.tx - state.px) * (1 - Math.exp(-dt * 4));
     state.py += (state.ty - state.py) * (1 - Math.exp(-dt * 4));
 
@@ -299,6 +301,12 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced }) {
     bCam.position.set(0, 3.6, dist); bCam.lookAt(0, 3.05, 0);
     bCam.updateProjectionMatrix();
 
+    // Without the idle spin (phones), draw only when something on screen changed: the GPU then
+    // rests while the visitor reads, and the phone does not heat up and slow down. The last
+    // frame stays on screen in the meantime.
+    const key = `${state.stage.toFixed(4)}|${state.px.toFixed(3)}|${state.py.toFixed(3)}|${bRect.w}x${bRect.h}|${canvas.width}`;
+    if (!spin && key === lastKey) return;
+    lastKey = key;
     renderer.setScissor(0, 0, canvas.width, canvas.height);
     renderer.setViewport(0, 0, canvas.clientWidth, canvas.clientHeight);
     renderer.setClearColor(0x000000, 0);

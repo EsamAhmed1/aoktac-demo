@@ -351,7 +351,11 @@ function paintFilm(dt) {
     let idx = 0;
     STILL_AT.forEach((s, i) => { if (t >= s - 1.5) idx = i; });
     if (idx !== lastStill) { stills.forEach((img, i) => img.classList.toggle("is-on", i === idx)); lastStill = idx; }
-  } else if (lastStill !== -2) { stills.forEach((img) => img.classList.remove("is-on")); lastStill = -2; }
+  } else if (lastStill !== -2) {
+    // The film has taken over: release the five full-HD stills from memory and compositing.
+    stills.forEach((img) => { img.classList.remove("is-on"); setTimeout(() => { img.hidden = true; }, 500); });
+    lastStill = -2;
+  }
 }
 // Full HD everywhere; phones, tablets and slow connections get a lighter encode of the same 1080p frames.
 const slowNet = navigator.connection && /(^|-)3g$/.test(navigator.connection.effectiveType || "");
@@ -444,6 +448,7 @@ async function initShowcase() {
       bottleSlot: $("[data-slot=bottle]", showSec),
       lowPower,
       reduced: reduceMotion,
+      spin: !touchFirst,      // phones: no idle spin, so the bottle is drawn only when it changes
     });
     await sc.warm();
     showcase = sc;

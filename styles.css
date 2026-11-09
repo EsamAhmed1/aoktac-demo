@@ -395,7 +395,7 @@ p { margin: 0; }
   .show__scale { bottom: 18px; left: var(--gutter); right: var(--gutter); transform: none; justify-content: space-between; }
   .show__scale button { min-width: 0; padding: .45rem .55rem; }
 
-  .fac { height: 300vh; }
+  .fac { height: 250vh; }   /* shorter on phones: the film moves sooner under the thumb */
   .fac__beats { bottom: 72px; }
   .fac__beat { font-size: clamp(1.35rem, 5.4vw, 1.9rem); }
   .fac__title { font-size: clamp(2.3rem, 10vw, 3.4rem); }
@@ -416,7 +416,7 @@ p { margin: 0; }
   .bar__brand img { height: 19px; }
   .bar__cta { display: none; }
   .bar__nav .bar__quote { display: inline-flex; margin-top: .9rem; border-bottom: 0; color: #fff; font-size: 1rem; padding: .9rem 1rem; }
-  .film { height: 680vh; }
+  .film { height: 520vh; }
   .film__media::after { background: linear-gradient(180deg, rgba(243, 246, 248, .94) 0%, rgba(243, 246, 248, .76) 36%, rgba(243, 246, 248, 0) 54%); }
   .hero { width: auto; right: var(--gutter); top: calc(var(--bar-h) + 26px); gap: 1rem; }
   .hero__title { font-size: clamp(2.3rem, 10.4vw, 3.2rem); }
