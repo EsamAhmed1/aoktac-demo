@@ -46,6 +46,19 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && nav.clas
 // written only when they change. The browser then never recalculates style or layout mid-frame,
 // which is what makes scroll animation stutter on phones.
 let frameRects = new Map(), vh = innerHeight;
+// The pinned stages are 100lvh (the full screen with the browser toolbar hidden), so all scroll
+// maths uses that one stable height. On phones the toolbar sliding in and out changes innerHeight
+// on every scroll; that must not move the films or resize anything (Apple, Wamos and Vizcom do the
+// same). It is re-measured only when the width changes (rotation) or on desktop resizes.
+const lvhProbe = Object.assign(document.createElement("div"), { ariaHidden: "true" });
+lvhProbe.style.cssText = "position:fixed;left:0;top:0;width:1px;height:100vh;height:100lvh;visibility:hidden;pointer-events:none";
+document.documentElement.appendChild(lvhProbe);
+let stableVH = lvhProbe.offsetHeight || innerHeight, lastWidth = innerWidth;
+addEventListener("resize", () => {
+  if (touchFirst && innerWidth === lastWidth) return;            // address bar only
+  lastWidth = innerWidth;
+  stableVH = lvhProbe.offsetHeight || innerHeight;
+});
 function rectOf(el) {
   let r = frameRects.get(el);
   if (!r) { r = el.getBoundingClientRect(); frameRects.set(el, r); }
@@ -66,7 +79,7 @@ function progressOf(section) {
 }
 function scrollForProgress(section, p) {
   const top = section.getBoundingClientRect().top + window.scrollY;
-  return top + p * (section.offsetHeight - innerHeight);
+  return top + p * (section.offsetHeight - stableVH);
 }
 function nearView(el, margin = 1.5) {
   const r = rectOf(el);
@@ -271,7 +284,7 @@ class FrameScrub {
     }
     if (!this.cw || !this.ch) return this.shown;
     const c = this.canvas, iw = a.width, ih = a.height;
-    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const dpr = Math.min(devicePixelRatio || 1, 1.5);
     const w = Math.round(this.cw * dpr), h = Math.round(this.ch * dpr);
     const ox = this.pan ? this.ox : 50;
     const sig = `${w}x${h}:${ox.toFixed(1)}`;
@@ -346,7 +359,10 @@ const focusAt = (t) => {
 };
 let lastStill = -1;
 function paintFilm(dt) {
-  if (!nearView(film, 0.2)) return;
+  if (!nearView(film, 0.2)) {
+    if (!nearView(film, 2) && filmScrub.frames.bitmaps.size) filmScrub.frames.free();
+    return;
+  }
   const portrait = innerWidth / innerHeight < 1.2;
   filmScrub.ox = portrait ? focusAt(filmScrub.shown) : 50;
   const t = filmScrub.step(filmScrub.duration * progressOf(film), dt);
@@ -542,8 +558,8 @@ if (canHover && !reduceMotion) {
 let wheelAt = 0, wheelDir = 0, wheelAbs = 0, stepping = false, stepTimer = 0;
 addEventListener("wheel", (e) => {
   if (!lenis) return;
-  const r = showSec.getBoundingClientRect(), run = r.height - innerHeight;
-  if (run <= 0 || r.top > 2 || r.bottom < innerHeight - 2) return;          // not pinned
+  const r = showSec.getBoundingClientRect(), run = r.height - stableVH;
+  if (run <= 0 || r.top > 2 || r.bottom < stableVH - 2) return;          // not pinned
   // Event time, not handling time: if the page is briefly busy, queued events of the same gesture
   // must not look like a pause.
   const now = e.timeStamp, dir = Math.sign(e.deltaY), abs = Math.abs(e.deltaY);
@@ -573,8 +589,8 @@ if (touchFirst) {
   let settle = 0, touching = false;
   const settleShow = () => {
     if (touching) return;
-    const r = showSec.getBoundingClientRect(), run = r.height - innerHeight;
-    if (run <= 0 || r.top > 0 || r.bottom < innerHeight) return;            // only while pinned
+    const r = showSec.getBoundingClientRect(), run = r.height - stableVH;
+    if (run <= 0 || r.top > 0 || r.bottom < stableVH) return;            // only while pinned
     const n = STOPS.length - 1, k = stopFromProgress(clamp(-r.top / run, 0, 1));
     const y = scrollForProgress(showSec, k / n);
     if (Math.abs(y - scrollY) > 2) window.scrollTo({ top: y, behavior: reduceMotion ? "auto" : "smooth" });
@@ -607,7 +623,7 @@ function layoutHz() {
   hzMax = hzTrack.scrollWidth - hzTrack.clientWidth;
   if (hzSwipe) { hz.style.height = ""; hzTrack.style.transform = ""; written.delete(hzTrack); return; }
   hzRun = Math.max(0, hzTrack.scrollWidth - innerWidth);
-  hz.style.height = `${innerHeight + hzRun / 0.92}px`;
+  hz.style.height = `${stableVH + hzRun / 0.92}px`;
   hzBoxes = hzPanels.map((panel) => ({ img: panel.querySelector(".hz__media img"), left: panel.offsetLeft, width: panel.offsetWidth }));
 }
 let hzMax = 0, hzBoxes = [];
@@ -617,12 +633,11 @@ hzTrack.addEventListener("scroll", () => {
 }, { passive: true });
 // Load every sector photo once the section is near. Lazy images inside a sideways scroller only
 // start when swiped into view on iPhone, which would show blank cards mid-swipe.
-let hzWarm = false;
+let hzWarm = false, hzQueue = [];
 function paintHz() {
-  if (!hzWarm && nearView(hz, 1.5)) {
-    hzWarm = true;
-    for (const img of $$("img", hz)) { img.loading = "eager"; img.decode?.().catch(() => {}); }
-  }
+  if (!hzWarm && nearView(hz, 1.5)) { hzWarm = true; hzQueue = $$("img", hz); }
+  // one photo per frame, so their decoding never piles into a single frame (as Oryzo does)
+  if (hzQueue.length) { const img = hzQueue.shift(); img.loading = "eager"; img.decode?.().catch(() => {}); }
   if (hzSwipe) return;
   if (!nearView(hz, 0.2)) return;
   const raw = progressOf(hz);
@@ -681,7 +696,7 @@ function tick(now) {
   last = now;
   lenis?.raf(now);
   // read phase: every section's position for this frame, before any writes
-  frameRects = new Map(); vh = innerHeight;
+  frameRects = new Map(); vh = stableVH;
   rectOf(film); rectOf(showSec); rectOf(hz); rectOf(fac);
   paintFilm(dt);
   paintShow(dt);

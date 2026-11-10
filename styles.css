@@ -1,6 +1,10 @@
 /* AOKTAC demo, round 2. World: a bright bottling hall. Hall-white ground, Aoktac blue for action,
    navy ink, steel hairlines, oven amber only in the Heat chapter. Inter for the voice,
    Instrument Serif italic for editorial accents. */
+/* --tb: how much of a full-height (100lvh) stage the mobile browser toolbar can cover; 0 on desktop.
+   Bottom-anchored captions add it so they stay clear of the toolbar. */
+:root { --tb: 0px; }
+@supports (height: 1lvh) { :root { --tb: calc(100lvh - 100svh); } }
 :root {
   --hall: #F3F6F8;
   --panel: #FFFFFF;
@@ -93,7 +97,7 @@ p { margin: 0; }
 
 /* ---------- 1. Hero and process film ---------- */
 .film { position: relative; height: 760vh; background: var(--hall); }
-.film__stage { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; }
+.film__stage { position: sticky; top: 0; height: 100vh; height: 100lvh; overflow: hidden; }
 .film__media { position: absolute; inset: 0; background: var(--hall); }
 .film__still, .film__video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: var(--ox, 50%) 50%; }
 .film__still { opacity: 0; transition: opacity .35s ease; }
@@ -120,7 +124,7 @@ p { margin: 0; }
 .hero__lede { font-size: clamp(1.05rem, 1.25vw, 1.2rem); color: var(--ink-2); max-width: 26rem; }
 
 .plate {
-  position: absolute; left: var(--gutter); bottom: clamp(28px, 9vh, 96px);
+  position: absolute; left: var(--gutter); bottom: calc(clamp(28px, 9vh, 96px) + var(--tb));
   width: min(25rem, calc(100vw - 2 * var(--gutter)));
   background: var(--panel); border: 1px solid var(--steel); border-radius: 2px;
   box-shadow: inset 0 0 0 5px var(--panel), inset 0 0 0 6px var(--steel-2), 0 10px 24px -18px rgba(11, 30, 51, .35);
@@ -136,12 +140,12 @@ p { margin: 0; }
 .plate[data-cap="heat"] .plate__spec dd { color: var(--amber-ink); }
 
 .film__note, .fac__note {
-  position: absolute; left: var(--gutter); bottom: 14px; z-index: 2;
+  position: absolute; left: var(--gutter); bottom: calc(14px + var(--tb)); z-index: 2;
   font-size: .75rem; color: var(--ink-2);
   background: rgba(255, 255, 255, .86); padding: .2rem .5rem; border-radius: 2px;
 }
 .film__cue {
-  position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%);
+  position: absolute; left: 50%; bottom: calc(26px + var(--tb)); transform: translateX(-50%);
   display: flex; flex-direction: column; align-items: center; gap: .6rem;
   font-size: .8125rem; color: var(--ink);
 }
@@ -151,10 +155,10 @@ p { margin: 0; }
 /* ---------- 2. Bottle and machine showcase ---------- */
 /* One screen plus half a screen per size step: each step is a single scroll gesture */
 .show { position: relative; height: 300vh; background: var(--hall); border-top: 1px solid var(--steel); }
-.show__stage { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; }
+.show__stage { position: sticky; top: 0; height: 100vh; height: 100lvh; overflow: hidden; }
 .show__canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .show__grid {
-  position: absolute; inset: calc(var(--bar-h) + 24px) var(--gutter) 84px;
+  position: absolute; inset: calc(var(--bar-h) + 24px) var(--gutter) calc(84px + var(--tb));
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: clamp(16px, 3vw, 48px);
   pointer-events: none;
 }
@@ -187,12 +191,12 @@ p { margin: 0; }
 .show__title em { color: var(--blue); }
 .show__lede { font-size: .9375rem; color: var(--ink-2); max-width: 22rem; }
 
-.show__size { position: absolute; left: var(--gutter); bottom: 96px; display: grid; gap: .2rem; pointer-events: none; }
+.show__size { position: absolute; left: var(--gutter); bottom: calc(96px + var(--tb)); display: grid; gap: .2rem; pointer-events: none; }
 .show__litres { font-family: var(--f-serif); font-style: italic; font-size: clamp(3.6rem, 7vw, 6.4rem); line-height: .9; letter-spacing: -0.02em; color: var(--blue); font-variant-numeric: tabular-nums; }
 .show__dims { font-size: .875rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 
 .show__spec {
-  position: absolute; right: var(--gutter); bottom: 96px; width: min(20rem, 40vw);
+  position: absolute; right: var(--gutter); bottom: calc(96px + var(--tb)); width: min(20rem, 40vw);
   display: grid; gap: .8rem; padding: 1.2rem 1.3rem; background: rgba(255, 255, 255, .9);
   border: 1px solid var(--steel); border-radius: 2px;
 }
@@ -205,7 +209,7 @@ p { margin: 0; }
 .show__credit { font-size: .75rem; color: var(--ink-2); line-height: 1.45; min-height: 4.35em; }
 
 .show__scale {
-  position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%);
+  position: absolute; left: 50%; bottom: calc(26px + var(--tb)); transform: translateX(-50%);
   list-style: none; margin: 0; display: flex; gap: .3rem;
   background: rgba(255, 255, 255, .9); border: 1px solid var(--steel); border-radius: 2px; padding: .25rem;
 }
@@ -219,7 +223,7 @@ p { margin: 0; }
 
 /* ---------- 3. Horizontal sectors ---------- */
 .hz { position: relative; background: var(--ink); color: #fff; }
-.hz__stage { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; }
+.hz__stage { position: sticky; top: 0; height: 100vh; height: 100lvh; overflow: hidden; }
 .hz__track {
   display: flex; gap: 28px; height: 100%; width: max-content;
   padding: calc(var(--bar-h) + 28px) var(--gutter) 64px;
@@ -254,7 +258,7 @@ p { margin: 0; }
 /* Older browsers without container units or aspect-ratio keep the previous fluid sizing */
 @supports not (width: 1cqw) { .hz { --card-pad: clamp(20px, 2.2vw, 36px); --word: clamp(4.5rem, 10.42vw, 9.375rem); } .hz.is-swipe { --word: clamp(3rem, 13vw, 6.5rem); } }
 @supports not (aspect-ratio: 1) { .hz__panel:not(.hz__panel--intro) { width: clamp(320px, 52vw, 900px); } .hz.is-swipe .hz__panel:not(.hz__panel--intro) { height: min(68svh, 600px); } }
-.hz__progress { position: absolute; left: var(--gutter); right: var(--gutter); bottom: 28px; height: 1px; background: rgba(255, 255, 255, .22); }
+.hz__progress { position: absolute; left: var(--gutter); right: var(--gutter); bottom: calc(28px + var(--tb)); height: 1px; background: rgba(255, 255, 255, .22); }
 .hz__progress span { display: block; height: 100%; background: #fff; transform-origin: left; transform: scaleX(var(--hp, 0)); }
 
 
@@ -276,13 +280,13 @@ p { margin: 0; }
 
 /* ---------- 4. Factory approach ---------- */
 .fac { position: relative; height: 420vh; background: var(--ink); }
-.fac__stage { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; color: #fff; }
+.fac__stage { position: sticky; top: 0; height: 100vh; height: 100lvh; overflow: hidden; color: #fff; }
 .fac__media { position: absolute; inset: 0; background: var(--fog); }
 .fac__poster, .fac__video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .fac__video { opacity: 0; transition: opacity .4s ease; }
 .fac__video.is-ready { opacity: 1; }
 .fac__media::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(11, 30, 51, .74) 0%, rgba(11, 30, 51, .32) 38%, rgba(11, 30, 51, 0) 62%); }
-.fac__beats { position: absolute; left: var(--gutter); right: var(--gutter); bottom: clamp(64px, 12vh, 140px); max-width: 44rem; }
+.fac__beats { position: absolute; left: var(--gutter); right: var(--gutter); bottom: calc(clamp(64px, 12vh, 140px) + var(--tb)); max-width: 44rem; }
 .fac__beat { position: absolute; left: 0; bottom: 0; width: 100%; opacity: 0; visibility: hidden; font-size: clamp(1.5rem, 2.6vw, 2.4rem); letter-spacing: -0.03em; line-height: 1.15; }
 .fac__title { font-size: clamp(2.6rem, 5.6vw, 5.6rem); letter-spacing: -0.045em; line-height: 1; }
 .fac__beat em { color: var(--on-ink-accent); }
@@ -354,9 +358,9 @@ p { margin: 0; }
 
 /* ---------- Responsive ---------- */
 @media (max-height: 780px) and (min-width: 901px) {
-  .show__spec { gap: .55rem; padding: .9rem 1.1rem; bottom: 84px; }
+  .show__spec { gap: .55rem; padding: .9rem 1.1rem; bottom: calc(84px + var(--tb)); }
   .show__credit { font-size: .6875rem; }
-  .show__size { bottom: 84px; }
+  .show__size { bottom: calc(84px + var(--tb)); }
 }
 
 @media (max-width: 1100px) {
@@ -375,7 +379,7 @@ p { margin: 0; }
 /* Tablet portrait and phone: showcase stacks bottle over machine, sectors become a swipe row */
 @media (max-width: 900px), (orientation: portrait) and (max-width: 1100px) {
   .show { height: 260vh; }   /* 40% of a screen per size on phones: one ordinary swipe */
-  .show__grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1.1fr) minmax(0, 1fr); inset: calc(var(--bar-h) + 176px) var(--gutter) 248px; gap: 6px; }
+  .show__grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1.1fr) minmax(0, 1fr); inset: calc(var(--bar-h) + 176px) var(--gutter) calc(248px + var(--tb)); gap: 6px; }
   .show__bottle { margin-top: 0; }
   .show__machine { border-left: 0; border-top: 1px solid var(--steel-2); margin-bottom: 0; }
   .show__photo { left: 3%; right: 3%; top: 6%; bottom: 7%; width: 94%; height: 87%; }
@@ -385,18 +389,18 @@ p { margin: 0; }
   .show__lede { font-size: .8125rem; }
   .show__size { left: auto; right: var(--gutter); bottom: auto; top: calc(var(--bar-h) + 112px); text-align: right; }
   .show__litres { font-size: clamp(2.8rem, 12vw, 4.2rem); }
-  .show__spec { left: var(--gutter); right: var(--gutter); width: auto; bottom: 74px; grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: .85rem 1rem; gap: .45rem .8rem; }
+  .show__spec { left: var(--gutter); right: var(--gutter); width: auto; bottom: calc(74px + var(--tb)); grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: .85rem 1rem; gap: .45rem .8rem; }
   .show__model { font-size: 1rem; grid-column: 1; line-height: 1.25; }
   .show__cta { grid-column: 2; grid-row: 1; padding: .6rem .9rem; }
   .show__facts { grid-column: 1 / -1; display: flex; gap: 1.4rem; border-top: 1px solid var(--steel-2); padding-top: .5rem; }
   .show__facts div { display: flex; gap: .4rem; align-items: baseline; }
   .show__facts dd { white-space: nowrap; }
   .show__credit { grid-column: 1 / -1; font-size: .6875rem; }
-  .show__scale { bottom: 18px; left: var(--gutter); right: var(--gutter); transform: none; justify-content: space-between; }
+  .show__scale { bottom: calc(18px + var(--tb)); left: var(--gutter); right: var(--gutter); transform: none; justify-content: space-between; }
   .show__scale button { min-width: 0; padding: .45rem .55rem; }
 
   .fac { height: 250vh; }   /* shorter on phones: the film moves sooner under the thumb */
-  .fac__beats { bottom: 72px; }
+  .fac__beats { bottom: calc(72px + var(--tb)); }
   .fac__beat { font-size: clamp(1.35rem, 5.4vw, 1.9rem); }
   .fac__title { font-size: clamp(2.3rem, 10vw, 3.4rem); }
 }
@@ -420,7 +424,7 @@ p { margin: 0; }
   .film__media::after { background: linear-gradient(180deg, rgba(243, 246, 248, .94) 0%, rgba(243, 246, 248, .76) 36%, rgba(243, 246, 248, 0) 54%); }
   .hero { width: auto; right: var(--gutter); top: calc(var(--bar-h) + 26px); gap: 1rem; }
   .hero__title { font-size: clamp(2.3rem, 10.4vw, 3.2rem); }
-  .plate { bottom: 64px; padding: 1.2rem 1.3rem; }
+  .plate { bottom: calc(64px + var(--tb)); padding: 1.2rem 1.3rem; }
   .plate__title { font-size: 2.2rem; }
   .film__cue { display: none; }
   .quote__row { grid-template-columns: minmax(0, 1fr); }

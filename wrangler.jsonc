@@ -1,0 +1,9 @@
+// Cloudflare (Workers static assets, the current form of Cloudflare Pages).
+// Build with `node scripts/build-dist.mjs`, then deploy with `npx wrangler deploy`.
+{
+  "name": "aoktac-website",
+  "compatibility_date": "2026-11-10",
+  "assets": {
+    "directory": "./dist"
+  }
+}

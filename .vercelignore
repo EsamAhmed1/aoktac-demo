@@ -4,3 +4,5 @@ DESIGN.md
 README.md
 assets/film/PROVENANCE.md
 assets/**/*.json
+scripts/
+wrangler.jsonc

@@ -192,8 +192,9 @@ function makeStudioScene(env, top, bottom) {
 export function createShowcase({ canvas, bottleSlot, lowPower, reduced, spin = true }) {
   // A lighter mesh on phones: identical at that size, and about a third of the work per reshape.
   if (lowPower) { N = 150; SEG = 80; }
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: "high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, lowPower ? 1.5 : 2));
+  // Phones: 1.25x and no MSAA (the clear-PET refraction pass doubles the cost of every pixel).
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowPower, alpha: true, powerPreference: "high-performance" });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, lowPower ? 1.25 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.toneMappingExposure = 1.0;

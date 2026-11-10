@@ -4,3 +4,5 @@ source/
 .playwright-mcp/
 .claude/
 *.log
+dist/
+.wrangler/

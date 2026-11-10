@@ -7,3 +7,9 @@ Run locally: `python -m http.server 5174` in this folder, then open http://local
 Deploy: any static host. On Vercel, import the repo with the "Other" preset and no build command.
 
 Films and the 3D bottle are visualizations generated from Aoktac's own photos; the machine photos are Aoktac's own. See assets/film/PROVENANCE.md.
+
+## Hosting
+
+- Vercel: pushes to `main` deploy automatically.
+- GitHub Pages: pushes to `main` publish automatically.
+- Cloudflare (Workers static assets): `node scripts/build-dist.mjs` then `npx wrangler deploy`.
