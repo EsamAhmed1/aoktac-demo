@@ -6,3 +6,4 @@ assets/film/PROVENANCE.md
 assets/**/*.json
 scripts/
 wrangler.jsonc
+functions/
