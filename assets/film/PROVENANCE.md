@@ -60,3 +60,7 @@ assets/film/frames/ holds the same two films as numbered WebP stills (hero 15 fp
 Safari, iPhone, iPad and other touch devices scrub these frames on a canvas; desktop Chrome, Edge and Firefox start on them and hand over to the full video once it has downloaded.
 
 The player blends each pair of neighbouring frames by the exact scroll position, so motion stays continuous between frames.
+
+## Round 6 (2026-11-10): full frame rate, no blending
+
+The hero frames were re-extracted at the film's own 24 fps (531 frames: hero-l 1600x900 WebP q66, hero-p 608x1080 crops WebP q70) and the factory at 20 fps (200 frames: fac-l 1600x900 q66, fac-p 720x1280 q68), from the same shipped encodes. The player now draws the nearest real frame instead of blending two, so motion stays sharp.

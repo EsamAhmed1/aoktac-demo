@@ -132,7 +132,7 @@ class Scrub {
     v.classList.add("is-ready");
   }
   step(target, dt) {
-    this.shown += (target - this.shown) * (reduceMotion ? 1 : 1 - Math.exp(-dt * 9));
+    this.shown += (target - this.shown) * filmFollow(dt);
     if (Math.abs(target - this.shown) < 0.004) this.shown = target;
     const v = this.video;
     if (this.ready && !v.seeking) {
@@ -150,10 +150,14 @@ class Scrub {
 //    to reach jump the queue.
 //  - Only frames near the current position are decoded, ahead of the scroll direction and off the
 //    main thread (createImageBitmap), so drawing never waits on a decode and memory stays small.
-//  - Each draw blends the two frames either side of the exact position, so even a very slow
-//    scroll moves continuously instead of stepping from frame to frame.
+//  - Every frame of the film is there (24 fps), so even a slow scroll moves frame by frame, and
+//    each picture is a real, sharp frame rather than a blend.
 const useFrames = !blobVideo || touchFirst;
-const AHEAD = 10, BEHIND = 4, KEEP = 20;
+// 24 fps frames: decode further ahead so a fast scroll never waits for a frame.
+const AHEAD = 18, BEHIND = 6, KEEP = 32;
+// How quickly the film catches up with the scroll. Touch scrolling is already smooth, so the film
+// follows the finger directly; on desktop a light catch-up (about 50 ms) rides on smooth scrolling.
+const filmFollow = (dt) => (reduceMotion || touchFirst ? 1 : 1 - Math.exp(-dt * 20));
 class FrameScrub {
   constructor(canvas, duration) {
     this.canvas = canvas; this.ctx = canvas.getContext("2d", { alpha: false });
@@ -162,7 +166,7 @@ class FrameScrub {
     this.ox = 50; this.pan = false; this.sig = "";
     this.retired = false; this.onReady = null;
     this.blobs = []; this.bitmaps = new Map(); this.decoding = new Set(); this.heading = 1;
-    this.urgent = []; this.queue = []; this.inflight = 0;
+    this.urgent = []; this.queue = []; this.inflight = 0; this.frameOf = new WeakMap(); this.speed = 0;
     // Canvas size is measured only when it changes, never during the frame loop.
     this.cw = canvas.clientWidth; this.ch = canvas.clientHeight;
     new ResizeObserver(() => { this.cw = canvas.clientWidth; this.ch = canvas.clientHeight; this.sig = ""; }).observe(canvas);
@@ -181,7 +185,7 @@ class FrameScrub {
     if (reduceMotion || saveData || this.retired || dir === this.dir) return;
     this.free();
     this.dir = dir; this.pan = pan; this.count = count; this.fps = count / this.duration;
-    this.blobs = new Array(count); this.ready = false; this.sig = "";
+    this.blobs = new Array(count); this.ready = false; this.sig = ""; this.drawn = null;
     this.canvas.classList.remove("is-ready");
     const order = [0, count - 1], seen = new Set(order);
     for (const stride of [16, 8, 4, 2, 1]) for (let i = 0; i < count; i += stride) if (!seen.has(i)) { seen.add(i); order.push(i); }
@@ -213,13 +217,13 @@ class FrameScrub {
       if (blob === undefined && !this.urgent.includes(i)) { this.urgent.push(i); if (this.inflight < 6) this.pump(this.dir); }
       return;
     }
-    if (this.decoding.size >= 3) return;
+    if (this.decoding.size >= 4) return;
     this.decoding.add(i);
     const dir = this.dir;
     const done = (bm) => {
       this.decoding.delete(i);
       if (this.dir !== dir || this.retired) { bm?.close?.(); return; }
-      if (bm) this.bitmaps.set(i, bm);
+      if (bm) { this.bitmaps.set(i, bm); this.frameOf.set(bm, i); }
     };
     if (window.createImageBitmap) createImageBitmap(blob).then(done, () => done(null));
     else { const img = new Image(); img.src = URL.createObjectURL(blob); img.decode().then(() => done(img), () => done(null)); }
@@ -236,47 +240,51 @@ class FrameScrub {
     return best;
   }
   // Keep decoded frames around the position, weighted toward where the scroll is heading.
-  keepWindow(pos) {
-    const c = Math.floor(pos), h = this.heading;
-    this.decode(c); this.decode(c + 1);
-    for (let d = 1; d <= AHEAD; d++) this.decode(c + 1 + d * h);
+  keepWindow(c) {
+    const h = this.heading;
+    // When scrolling fast only every 2nd or 3rd frame is shown, so decode just those, further out.
+    const stride = clamp(Math.round(this.speed), 1, 4);
+    this.decode(c);
+    for (let d = 1; d <= AHEAD; d++) this.decode(c + d * h * stride);
     for (let d = 1; d <= BEHIND; d++) this.decode(c - d * h);
     for (const [k, b] of this.bitmaps) if (Math.abs(k - c) > KEEP) { b.close?.(); this.bitmaps.delete(k); }
   }
   step(target, dt) {
     const before = this.shown;
-    this.shown += (target - this.shown) * (reduceMotion ? 1 : 1 - Math.exp(-dt * 9));
+    this.shown += (target - this.shown) * filmFollow(dt);
     if (Math.abs(target - this.shown) < 0.002) this.shown = target;
     if (!this.count || this.retired) return this.shown;
     if (this.shown !== before) this.heading = this.shown > before ? 1 : -1;
-    const pos = clamp(this.shown * this.fps, 0, this.count - 1);
-    this.keepWindow(pos);
-    const i0 = Math.floor(pos), f = pos - i0;
-    let a = this.bitmaps.get(i0), b = this.bitmaps.get(i0 + 1), mix = f;
-    if (!a || !b) {
-      // Not decoded yet (a fast jump): hold the last picture rather than show a far-off frame.
-      a = a || b || this.bitmaps.get(i0 - 1) || this.bitmaps.get(i0 + 2);
-      b = null;
-      if (!a && !this.ready) a = this.firstPicture(i0);   // nothing on screen yet: nearest frame we have
+    // Every film frame is a real, sharp frame: the nearest one is drawn, never a blend of two.
+    const i = Math.round(clamp(this.shown * this.fps, 0, this.count - 1));
+    this.speed = this.speed * 0.7 + Math.abs(i - (this.lastI ?? i)) * 0.3;   // frames per refresh
+    this.lastI = i;
+    this.keepWindow(i);
+    let a = this.bitmaps.get(i);
+    if (!a) {
+      // Exact frame not decoded yet (a fast flick): show the closest one that is, so the picture
+      // keeps moving with the scroll; before anything is on screen, the nearest downloaded frame.
+      let best = null, bestD = 25;
+      for (const [k, bm] of this.bitmaps) { const d = Math.abs(k - i); if (d < bestD) { best = bm; bestD = d; } }
+      a = best || (!this.ready ? this.firstPicture(i) : null);
       if (!a) return this.shown;
     }
-    const c = this.canvas, iw = a.width, ih = a.height;
-    // Never draw finer than the frames themselves: more canvas pixels would add cost, not detail.
     if (!this.cw || !this.ch) return this.shown;
-    const fit = Math.max(this.cw / iw, this.ch / ih);
-    const dpr = clamp(1 / fit, 1, Math.min(devicePixelRatio || 1, 2));
+    const c = this.canvas, iw = a.width, ih = a.height;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
     const w = Math.round(this.cw * dpr), h = Math.round(this.ch * dpr);
     const ox = this.pan ? this.ox : 50;
-    const sig = `${w}x${h}:${ox.toFixed(1)}:${i0}:${b ? Math.round(mix * 48) : -1}`;
-    if (sig === this.sig) return this.shown;
+    const sig = `${w}x${h}:${ox.toFixed(1)}`;
+    if (a === this.drawn && sig === this.sig) return this.shown;   // same frame, same canvas
     if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
-    // cover-fit, with the same horizontal focus as CSS object-position
-    const s = Math.max(w / iw, h / ih), dw = iw * s, dh = ih * s, x = (w - dw) * ox / 100, y = (h - dh) / 2;
+    // cover-fit, with the same horizontal focus as CSS object-position; high-quality scaling to
+    // the screen's pixels keeps edges crisp
+    const s = Math.max(w / iw, h / ih), dw = iw * s, dh = ih * s;
     const ctx = this.ctx;
-    ctx.globalAlpha = 1;
-    ctx.drawImage(a, x, y, dw, dh);
-    if (b && mix > 0.01) { ctx.globalAlpha = mix; ctx.drawImage(b, x, y, dw, dh); ctx.globalAlpha = 1; }
-    this.sig = sig;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(a, (w - dw) * ox / 100, (h - dh) / 2, dw, dh);
+    this.drawn = a; this.sig = sig; c.frameShown = this.frameOf.get(a);   // read by QA tooling only
     if (!this.ready) { this.ready = true; c.classList.add("is-ready"); this.onReady?.(); }
     return this.shown;
   }
@@ -364,8 +372,8 @@ const liteVideo = innerWidth < 1100 || lowPower || slowNet;
 // get 1600x900 frames panned on the canvas.
 const filmVideoSrc = liteVideo ? "assets/film/film-1920-lite.mp4" : "assets/film/film-1920.mp4";
 const filmFrames = () => innerWidth / innerHeight < 0.8
-  ? filmScrub.load("assets/film/frames/hero-p/", 332, false, filmVideoSrc)
-  : filmScrub.load("assets/film/frames/hero-l/", 332, true, filmVideoSrc);
+  ? filmScrub.load("assets/film/frames/hero-p/", 531, false, filmVideoSrc)
+  : filmScrub.load("assets/film/frames/hero-l/", 531, true, filmVideoSrc);
 addEventListener("resize", () => { if (filmScrub.frames.dir) filmFrames(); });
 // Start as soon as the page is parsed rather than after every image has loaded.
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", filmFrames, { once: true }); else filmFrames();
@@ -657,7 +665,7 @@ if (facPortrait()) facPoster.src = "assets/film/factory-poster-p.webp";
 function paintFac(dt) {
   // Fetch three screens early so the frames are already here when the visitor arrives.
   if (nearView(fac, 3)) {
-    facScrub.load(facPortrait() ? "assets/film/frames/fac-p/" : "assets/film/frames/fac-l/", 100, false,
+    facScrub.load(facPortrait() ? "assets/film/frames/fac-p/" : "assets/film/frames/fac-l/", 200, false,
       facPortrait() ? "assets/film/factory-1080p.mp4" : "assets/film/factory-1920.mp4");
   }
   if (!nearView(fac, 0.2)) return;
