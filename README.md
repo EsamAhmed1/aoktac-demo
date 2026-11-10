@@ -12,4 +12,4 @@ Films and the 3D bottle are visualizations generated from Aoktac's own photos; t
 
 - Vercel: pushes to `main` deploy automatically.
 - GitHub Pages: pushes to `main` publish automatically.
-- Cloudflare (Workers static assets): `node scripts/build-dist.mjs` then `npx wrangler deploy`.
+- Cloudflare Pages (https://aoktac-website.pages.dev): `node scripts/build-dist.mjs` then `npx wrangler pages deploy dist --project-name aoktac-website --branch main`.
