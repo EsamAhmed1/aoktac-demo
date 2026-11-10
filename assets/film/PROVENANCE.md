@@ -64,3 +64,17 @@ The player blends each pair of neighbouring frames by the exact scroll position,
 ## Round 6 (2026-11-10): full frame rate, no blending
 
 The hero frames were re-extracted at the film's own 24 fps (531 frames: hero-l 1600x900 WebP q66, hero-p 608x1080 crops WebP q70) and the factory at 20 fps (200 frames: fac-l 1600x900 q66, fac-p 720x1280 q68), from the same shipped encodes. The player now draws the nearest real frame instead of blending two, so motion stays sharp.
+
+## Round 7 (2026-11-11): scroll-scrub video encodes
+
+The films are scrubbed as video again, re-encoded for seeking from the Round 3 2K masters (source/gen/up/: joined.mp4 2580x1440 for the hero film, fac169.mp4 and fac916.mp4 for the factory). Every file has a keyframe every 3 frames, no B-frames, 24 fps, no audio, and faststart. A seek therefore decodes at most two frames, on the device's video hardware. Safari gets HEVC (hvc1); every other browser gets H.264. ffmpeg 9.0.2, x264/x265 preset slow; H.264 at CRF 21 (tune film), HEVC at CRF 24.
+
+| File | Size | Source and processing |
+|---|---|---|
+| film-l-avc.mp4 / film-l-hevc.mp4 | 26.0 / 16.0 MB | joined.mp4, Lanczos to 1920x1080 (landscape screens) |
+| film-p-avc.mp4 / film-p-hevc.mp4 | 15.6 / 9.5 MB | joined.mp4, 810x1440 native-resolution crop panned with the page's FOCUS curve (portrait screens) |
+| factory-l-avc.mp4 / factory-l-hevc.mp4 | 20.8 / 15.1 MB | fac169.mp4, centre crop 2560x1440, Lanczos to 1920x1080 |
+| factory-p-avc.mp4 / factory-p-hevc.mp4 | 20.5 / 15.0 MB | fac916.mp4, Lanczos to 1080x1920 |
+
+film-1920.mp4, film-1920-lite.mp4, factory-1920.mp4 and factory-1080p.mp4 were removed from the site; they remain in git history. The frames in assets/film/frames/ are unchanged and now serve as the first-moments bridge and the fallback.
+

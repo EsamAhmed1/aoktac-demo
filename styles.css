@@ -185,6 +185,9 @@ p { margin: 0; }
 .show__fallback { display: none; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 85%; }
 .show.no-webgl .show__fallback { display: block; }
 .show.no-webgl .show__canvas { display: none; }
+/* Until the 3D bottle is ready the pre-rendered image stands in; the canvas keeps its size so it can be measured. */
+.show.is-3d-pending .show__fallback { display: block; }
+.show.is-3d-pending .show__canvas { visibility: hidden; }
 
 .show__head { position: absolute; left: var(--gutter); top: calc(var(--bar-h) + 28px); display: grid; gap: .6rem; max-width: 24rem; }
 .show__title { font-size: clamp(2rem, 3.4vw, 3.4rem); letter-spacing: -0.04em; }

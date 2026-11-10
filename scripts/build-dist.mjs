@@ -10,7 +10,7 @@ const out = join(root, "dist");
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out);
 
-for (const f of ["index.html", "app.js", "styles.css", "showcase3d.js"]) cpSync(join(root, f), join(out, f));
+for (const f of ["index.html", "app.js", "styles.css", "showcase3d.js", "showcase-worker.js"]) cpSync(join(root, f), join(out, f));
 cpSync(join(root, "assets"), join(out, "assets"), {
   recursive: true,
   filter: (src) => !src.endsWith(".json") && !src.endsWith("PROVENANCE.md"),

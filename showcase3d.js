@@ -1,6 +1,8 @@
 // AOKTAC 3D showcase: a PET bottle that grows through the published TEC BLOW
 // container envelopes. The machine beside it is Aoktac's own photography, driven by app.js.
-import * as THREE from "three";
+// Imported by its full URL (the same one the page's import map uses): this module also runs in a
+// worker, and workers do not see import maps.
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js";
 
 let N = 220;            // profile samples, shared by every bottle so shapes can morph
 let SEG = 128;          // radial segments (both lowered on phones and low-power devices)
@@ -120,9 +122,15 @@ function makeCap() {
   return g;
 }
 
+// 2D canvases for the generated textures; a worker has no document, so it uses OffscreenCanvas.
+const canvas2d = (w, h) => {
+  if (typeof document !== "undefined") { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; }
+  return new OffscreenCanvas(w, h);
+};
+
 // Studio sweep: canvas row 0 maps to the top of the sphere. Bright wall, soft horizon, cooler floor.
 function sweepTexture(top, bottom) {
-  const c = document.createElement("canvas"); c.width = 4; c.height = 512;
+  const c = canvas2d(4, 512);
   const x = c.getContext("2d");
   const g = x.createLinearGradient(0, 0, 0, 512);
   g.addColorStop(0, top); g.addColorStop(0.47, top); g.addColorStop(0.53, bottom); g.addColorStop(1, bottom);
@@ -131,7 +139,7 @@ function sweepTexture(top, bottom) {
   return t;
 }
 function blobTexture() {
-  const c = document.createElement("canvas"); c.width = c.height = 256;
+  const c = canvas2d(256, 256);
   const x = c.getContext("2d");
   const gr = x.createRadialGradient(128, 128, 6, 128, 128, 126);
   gr.addColorStop(0, "rgba(11,30,51,.4)"); gr.addColorStop(0.45, "rgba(11,30,51,.13)"); gr.addColorStop(1, "rgba(11,30,51,0)");
@@ -189,12 +197,14 @@ function makeStudioScene(env, top, bottom) {
   return { scene, key, blob };
 }
 
-export function createShowcase({ canvas, bottleSlot, lowPower, reduced, spin = true }) {
+// On the page, `bottleSlot` is measured directly. In the worker (OffscreenCanvas) the page measures
+// it and sends the sizes with setLayout({ cw, ch, slot }).
+export function createShowcase({ canvas, bottleSlot, lowPower, reduced, spin = true, dpr = globalThis.devicePixelRatio || 1, layout = null }) {
   // A lighter mesh on phones: identical at that size, and about a third of the work per reshape.
   if (lowPower) { N = 150; SEG = 80; }
   // Phones: 1.25x and no MSAA (the clear-PET refraction pass doubles the cost of every pixel).
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowPower, alpha: true, powerPreference: "high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, lowPower ? 1.25 : 2));
+  renderer.setPixelRatio(Math.min(dpr, lowPower ? 1.25 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.toneMappingExposure = 1.0;
@@ -235,10 +245,18 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced, spin = t
   }
   // The bottle slot sits at a fixed place on the canvas (both live in the pinned stage), so it is
   // measured on resize, not every frame.
-  let slot = null;
-  function resize() { renderer.setSize(canvas.clientWidth, canvas.clientHeight, false); slot = rectOf(bottleSlot); lastKey = ""; }
-  new ResizeObserver(resize).observe(canvas);
-  window.addEventListener("resize", resize);
+  let slot = null, cw = 1, ch = 1;
+  const onPage = !layout;
+  function apply() { renderer.setSize(cw, ch, false); lastKey = ""; }
+  function resize() {
+    if (!onPage) return apply();
+    cw = canvas.clientWidth; ch = canvas.clientHeight; slot = rectOf(bottleSlot); apply();
+  }
+  function setLayout(l) { cw = Math.max(1, l.cw); ch = Math.max(1, l.ch); slot = l.slot; apply(); }
+  if (onPage) {
+    new ResizeObserver(resize).observe(canvas);
+    window.addEventListener("resize", resize);
+  } else setLayout(layout);
 
   // Reduced quality for slow GPUs: 1x pixels, half-resolution refraction, no soft shadow map
   // (the contact blob stays). app.js calls this when frames run long.
@@ -254,11 +272,11 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced, spin = t
     }
   }
   function dispose() {
-    window.removeEventListener("resize", resize);
+    if (onPage) window.removeEventListener("resize", resize);
     renderer.dispose();
     renderer.forceContextLoss();
   }
-  resize();
+  if (onPage) resize();
 
   function setStage(s) { state.stage = s; }
   function setPointer(x, y) { state.tx = x; state.ty = y; }
@@ -296,7 +314,7 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced, spin = t
     bGroup.rotation.x = state.py * 0.06;
 
     // Camera frames the tallest container so growth reads at true relative scale.
-    const bRect = slot || (slot = rectOf(bottleSlot));
+    const bRect = slot || (slot = onPage ? rectOf(bottleSlot) : { x: 0, y: 0, w: cw, h: ch });
     bCam.aspect = bRect.w / Math.max(1, bRect.h);
     const dist = (7.4 / 2) / Math.tan(THREE.MathUtils.degToRad(bCam.fov / 2)) * (bCam.aspect < 0.75 ? 1.15 : 1);
     bCam.position.set(0, 3.6, dist); bCam.lookAt(0, 3.05, 0);
@@ -309,7 +327,7 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced, spin = t
     if (!spin && key === lastKey) return;
     lastKey = key;
     renderer.setScissor(0, 0, canvas.width, canvas.height);
-    renderer.setViewport(0, 0, canvas.clientWidth, canvas.clientHeight);
+    renderer.setViewport(0, 0, cw, ch);
     renderer.setClearColor(0x000000, 0);
     renderer.clear();
     if (bRect.w < 2 || bRect.h < 2) return;
@@ -327,5 +345,5 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced, spin = t
     state.visible = true; frame(0.016); state.visible = was;
   }
 
-  return { setStage, setPointer, setVisible, frame, resize, setQuality, dispose, warm };
+  return { setStage, setPointer, setVisible, frame, resize, setLayout, setQuality, dispose, warm };
 }
