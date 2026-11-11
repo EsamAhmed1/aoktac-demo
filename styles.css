@@ -154,7 +154,7 @@ p { margin: 0; }
 
 /* ---------- 2. Bottle and machine showcase ---------- */
 /* One screen plus half a screen per size step: each step is a single scroll gesture */
-.show { position: relative; height: 300vh; background: var(--hall); border-top: 1px solid var(--steel); }
+.show { position: relative; height: 300vh; background: var(--hall); border-top: 1px solid var(--steel); --size-b: 96px; }
 .show__stage { position: sticky; top: 0; height: 100vh; height: 100lvh; overflow: hidden; }
 .show__canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .show__grid {
@@ -162,7 +162,9 @@ p { margin: 0; }
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: clamp(16px, 3vw, 48px);
   pointer-events: none;
 }
-.show__bottle { margin-top: clamp(96px, 15vh, 150px); }
+/* The bottle viewport stops just above the size readout (bottom-left), so no bottle runs behind it. */
+/* ...and starts below the title and lede (title, gap and two lede lines), however wide the screen. */
+.show__bottle { margin-top: max(clamp(96px, 15vh, 150px), calc(clamp(2rem, 3.4vw, 3.4rem) * 1.1 + 3.6rem + 18px)); margin-bottom: calc(var(--size-b) - 84px + clamp(3.6rem, 7vw, 6.4rem) * .9 + 1.45rem + 14px); }
 .show__machine {
   position: relative; border-left: 1px solid var(--steel-2); margin-bottom: clamp(260px, 36vh, 310px); overflow: hidden;
   /* Same studio sweep as the bottle viewport: bright wall, soft horizon, cooler floor */
@@ -184,6 +186,14 @@ p { margin: 0; }
 .show__bottle { position: relative; }
 .show__fallback { display: none; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 85%; }
 .show.no-webgl .show__fallback { display: block; }
+/* The five stills are stacked; app.js dissolves from one size to the next as the stage moves.
+   In a viewport wider than the stills (short phones) they are fitted whole rather than cropped,
+   so the 30 L cap is never cut, and the slot carries the same studio backdrop at the sides. */
+.show__bottle { container-type: size; }
+.show.no-webgl .show__bottle, .show.is-3d-pending .show__bottle { background: linear-gradient(180deg, #f1f4f7 0%, #f1f4f7 30%, #eaeef2 40%, #dfe5eb 50%, #d4dce3 60%, #cfd8e0 70%, #cfd8e0 100%); }
+@container (min-aspect-ratio: 7 / 9) { .show__bottle-img { object-fit: contain; object-position: 50% 100%; } }
+.show__bottle-img { opacity: 0; }
+.show__bottle-img[data-bottle="0"] { opacity: 1; }
 .show.no-webgl .show__canvas { display: none; }
 /* Until the 3D bottle is ready the pre-rendered image stands in; the canvas keeps its size so it can be measured. */
 .show.is-3d-pending .show__fallback { display: block; }
@@ -194,7 +204,7 @@ p { margin: 0; }
 .show__title em { color: var(--blue); }
 .show__lede { font-size: .9375rem; color: var(--ink-2); max-width: 22rem; }
 
-.show__size { position: absolute; left: var(--gutter); bottom: calc(96px + var(--tb)); display: grid; gap: .2rem; pointer-events: none; }
+.show__size { position: absolute; left: var(--gutter); bottom: calc(var(--size-b) + var(--tb)); display: grid; gap: .2rem; pointer-events: none; }
 .show__litres { font-family: var(--f-serif); font-style: italic; font-size: clamp(3.6rem, 7vw, 6.4rem); line-height: .9; letter-spacing: -0.02em; color: var(--blue); font-variant-numeric: tabular-nums; }
 .show__dims { font-size: .875rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 
@@ -363,7 +373,7 @@ p { margin: 0; }
 @media (max-height: 780px) and (min-width: 901px) {
   .show__spec { gap: .55rem; padding: .9rem 1.1rem; bottom: calc(84px + var(--tb)); }
   .show__credit { font-size: .6875rem; }
-  .show__size { bottom: calc(84px + var(--tb)); }
+  .show { --size-b: 84px; }
 }
 
 @media (max-width: 1100px) {
@@ -382,30 +392,78 @@ p { margin: 0; }
 /* Tablet portrait and phone: showcase stacks bottle over machine, sectors become a swipe row */
 @media (max-width: 900px), (orientation: portrait) and (max-width: 1100px) {
   .show { height: 260vh; }   /* 40% of a screen per size on phones: one ordinary swipe */
-  .show__grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1.1fr) minmax(0, 1fr); inset: calc(var(--bar-h) + 176px) var(--gutter) calc(248px + var(--tb)); gap: 6px; }
-  .show__bottle { margin-top: 0; }
-  .show__machine { border-left: 0; border-top: 1px solid var(--steel-2); margin-bottom: 0; }
-  .show__photo { left: 3%; right: 3%; top: 6%; bottom: 7%; width: 94%; height: 87%; }
-  .show__photos::after { bottom: 5%; }
-  .show__head { top: calc(var(--bar-h) + 16px); max-width: none; right: var(--gutter); }
-  .show__title { font-size: clamp(1.9rem, 6.4vw, 2.6rem); }
+  /* The stage is a column sized to the visible screen (100lvh minus the toolbar, --tb): title,
+     size readout, then the bottle and machine share whatever height is left, then the spec card
+     and the size tabs. Nothing is placed by fixed offsets, so short phones never squeeze the
+     bottle to a strip. */
+  .show__stage {
+    display: flex; flex-direction: column; gap: 10px;
+    padding: calc(var(--bar-h) + env(safe-area-inset-top, 0px) + 14px) var(--gutter) calc(14px + var(--tb));
+  }
+  .show__stage > * { position: relative; inset: auto; left: auto; right: auto; top: auto; bottom: auto; transform: none; }
+  .show__head { order: 1; max-width: none; gap: .35rem; }
+  .show__size { order: 2; display: flex; align-items: baseline; gap: .7rem; flex-wrap: wrap; }
+  .show__grid { order: 3; flex: 1 1 0; min-height: 150px; gap: 8px; }
+  .show__spec { order: 4; flex: none; }
+  .show__scale { order: 5; flex: none; }
+  /* Bottle and machine side by side: the bottle viewport stays close to the bottles' own shape. */
+  .show__grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); grid-template-rows: minmax(0, 1fr); }
+  .show__bottle { margin: 0; }
+  .show__machine { margin: 0; border-left: 1px solid var(--steel-2); }
+  .show__photo { left: 4%; right: 4%; top: 8%; bottom: 9%; width: 92%; height: 83%; }
+  .show__photos::after { bottom: 6%; }
+  .show__title { font-size: clamp(1.75rem, 6.4vw, 2.6rem); }
   .show__lede { font-size: .8125rem; }
-  .show__size { left: auto; right: var(--gutter); bottom: auto; top: calc(var(--bar-h) + 112px); text-align: right; }
-  .show__litres { font-size: clamp(2.8rem, 12vw, 4.2rem); }
-  .show__spec { left: var(--gutter); right: var(--gutter); width: auto; bottom: calc(74px + var(--tb)); grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: .85rem 1rem; gap: .45rem .8rem; }
+  .show__litres { font-size: clamp(2.4rem, 10.5vw, 4rem); }
+  .show__spec { width: auto; grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: .8rem 1rem; gap: .45rem .8rem; }
   .show__model { font-size: 1rem; grid-column: 1; line-height: 1.25; }
   .show__cta { grid-column: 2; grid-row: 1; padding: .6rem .9rem; }
   .show__facts { grid-column: 1 / -1; display: flex; gap: 1.4rem; border-top: 1px solid var(--steel-2); padding-top: .5rem; }
   .show__facts div { display: flex; gap: .4rem; align-items: baseline; }
   .show__facts dd { white-space: nowrap; }
   .show__credit { grid-column: 1 / -1; font-size: .6875rem; }
-  .show__scale { bottom: calc(18px + var(--tb)); left: var(--gutter); right: var(--gutter); transform: none; justify-content: space-between; }
+  .show__scale { justify-content: space-between; }
   .show__scale button { min-width: 0; padding: .45rem .55rem; }
 
   .fac { height: 250vh; }   /* shorter on phones: the film moves sooner under the thumb */
   .fac__beats { bottom: calc(72px + var(--tb)); }
   .fac__beat { font-size: clamp(1.35rem, 5.4vw, 1.9rem); }
   .fac__title { font-size: clamp(2.3rem, 10vw, 3.4rem); }
+}
+
+/* Short portrait phones (iPhone SE and similar with the toolbar showing): drop the lede so the
+   bottle and machine keep their room. */
+@media (orientation: portrait) and (max-width: 900px) and (max-height: 640px) {
+  .show__lede { display: none; }
+}
+
+/* Phones held sideways: bottle and machine on the left, everything else stacked on the right. */
+@media (orientation: landscape) and (max-height: 540px) {
+  .show { height: 260vh; }
+  .show__stage {
+    display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto auto; gap: 4px 18px;
+    padding: calc(var(--bar-h) + env(safe-area-inset-top, 0px) + 8px) max(var(--gutter), env(safe-area-inset-right, 0px)) calc(8px + var(--tb)) max(var(--gutter), env(safe-area-inset-left, 0px));
+  }
+  .show__stage > * { position: relative; inset: auto; left: auto; right: auto; top: auto; bottom: auto; transform: none; margin: 0; }
+  .show__grid { grid-column: 1; grid-row: 1 / -1; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); grid-template-rows: minmax(0, 1fr); gap: 8px; }
+  .show__bottle, .show__machine { margin: 0; }
+  .show__machine { border-left: 1px solid var(--steel-2); border-top: 0; }
+  .show__head { grid-column: 2; grid-row: 1; max-width: none; }
+  .show__lede { display: none; }
+  .show__title { font-size: clamp(1.35rem, 3.2vw, 2rem); }
+  .show__size { grid-column: 2; grid-row: 2; display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; text-align: left; }
+  .show__litres { font-size: clamp(2rem, 5vw, 2.8rem); }
+  .show__dims { font-size: .75rem; }
+  .show__spec { grid-column: 2; grid-row: 4; width: auto; grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: .45rem .75rem; gap: .25rem .7rem; }
+  .show__model { font-size: .9375rem; grid-column: 1; line-height: 1.25; }
+  .show__cta { grid-column: 2; grid-row: 1; padding: .5rem .8rem; }
+  .show__facts { grid-column: 1 / -1; display: flex; gap: 1rem; padding-top: .35rem; }
+  .show__facts div { display: flex; gap: .35rem; align-items: baseline; }
+  .show__facts dt { font-size: .6875rem; }
+  .show__credit { grid-column: 1 / -1; font-size: .625rem; min-height: 2.9em; }   /* two lines fit this column */
+  .show__scale { grid-column: 2; grid-row: 5; justify-content: space-between; }
+  .show__scale button { min-width: 0; padding: .35rem .45rem; }
+  .show__photo { left: 4%; right: 4%; top: 8%; bottom: 9%; width: 92%; height: 83%; }
 }
 
 @media (max-width: 900px) {

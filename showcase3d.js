@@ -316,7 +316,10 @@ export function createShowcase({ canvas, bottleSlot, lowPower, reduced, spin = t
     // Camera frames the tallest container so growth reads at true relative scale.
     const bRect = slot || (slot = onPage ? rectOf(bottleSlot) : { x: 0, y: 0, w: cw, h: ch });
     bCam.aspect = bRect.w / Math.max(1, bRect.h);
-    const dist = (7.4 / 2) / Math.tan(THREE.MathUtils.degToRad(bCam.fov / 2)) * (bCam.aspect < 0.75 ? 1.15 : 1);
+    // Far enough back to fit the tallest bottle (7.4 units of height) and the widest one (3.0 units
+    // across, with room for its turn and edge highlights), whatever the viewport's shape.
+    const halfTan = Math.tan(THREE.MathUtils.degToRad(bCam.fov / 2));
+    const dist = Math.max((7.4 / 2) / halfTan * (bCam.aspect < 0.75 ? 1.15 : 1), (4.2 / 2) / (halfTan * bCam.aspect));
     bCam.position.set(0, 3.6, dist); bCam.lookAt(0, 3.05, 0);
     bCam.updateProjectionMatrix();
 

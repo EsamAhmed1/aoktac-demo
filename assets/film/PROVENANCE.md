@@ -78,3 +78,7 @@ The films are scrubbed as video again, re-encoded for seeking from the Round 3 2
 
 film-1920.mp4, film-1920-lite.mp4, factory-1920.mp4 and factory-1080p.mp4 were removed from the site; they remain in git history. The frames in assets/film/frames/ are unchanged and now serve as the first-moments bridge and the fallback.
 
+
+## Round 8 (2026-11-11): bottle stills re-rendered
+
+assets/img/bottle-0.webp to bottle-4.webp were re-rendered at 1050x1350 (WebP q88) from the live showcase3d.js scene with source/render-bottles.html (kept locally with the other sources; Edge, hardware WebGL, antialiased), replacing the 700x900 round-2 renders. Phones show these stills instead of the live 3D bottle.

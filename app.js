@@ -404,6 +404,7 @@ function filmPlayer(canvas, video, duration) {
       frames.fill();
     },
     step(target, dt) {
+      this.target = target;
       if (full.ready) {
         if (full.verdict === true) { if (!frames.retired) frames.retire(); }
         else frames.hide();
@@ -501,7 +502,7 @@ const showStage = $(".show__stage", showSec);
 const ui = {
   litres: $("#show-litres"), dims: $("#show-dims"), model: $("#show-model"), cav: $("#show-cav"),
   bph: $("#show-bph"), cta: $("#show-cta"), credit: $("#show-credit"),
-  stops: $$(".show__scale button", showSec), bottleImg: $(".show__bottle-img", showSec), photos: $$(".show__photo", showSec),
+  stops: $$(".show__scale button", showSec), bottleImgs: $$(".show__bottle-img", showSec), photos: $$(".show__photo", showSec),
 };
 let showcase = null, showcaseLoading = false, showcaseRetired = false, showIndex = -1, showStageVal = 0;
 // Software WebGL (hardware acceleration off, virtual machines, blocklisted GPUs) draws the
@@ -517,7 +518,12 @@ const gpuName = (() => {
     return info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : plain;
   } catch { return null; }
 })();
-const hasWebGL = gpuName !== null && !/swiftshader|llvmpipe|softpipe|software|basic render/i.test(gpuName);
+// Phones show the bottles as stills rendered from the same 3D scene (assets/img/bottle-N.webp) and
+// dissolve between them: the glass shaders cost a phone GPU a long first compile and a refraction
+// pass on every reshape, which shows up as dropped frames while scrolling. Tablets and computers
+// draw the live 3D bottle.
+const phoneScreen = touchFirst && Math.min(screen.width, screen.height) < 600;
+const hasWebGL = !phoneScreen && gpuName !== null && !/swiftshader|llvmpipe|softpipe|software|basic render/i.test(gpuName);
 showSec.classList.add(hasWebGL ? "is-3d-pending" : "no-webgl");
 
 // One scroll = one size. The scroll position only picks a size (the nearest stop); the bottle and
@@ -535,7 +541,6 @@ function setShowIndex(i) {
   ui.bph.textContent = s.bph;
   ui.credit.textContent = `${PHOTOS[i]} Images from Aoktac, not to scale with the bottle.`
     .replace(/\b(RL|AOK)-[\w-]+/g, (m) => m.replace(/-/g, "‑")); // model codes stay on one line
-  if (ui.bottleImg) ui.bottleImg.src = `assets/img/bottle-${i}.webp`;
   ui.cta.dataset.model = s.model;
   ui.cta.dataset.size = s.litres;
   ui.photos.forEach((img, k) => img.setAttribute("aria-hidden", k === i ? "false" : "true"));
@@ -647,6 +652,18 @@ function paintPhotos(stage) {
     img.style.visibility = ro > 0 ? "visible" : "hidden";
   });
 }
+// The bottle stills dissolve on the same curve the 3D bottle morphs on: the next size fades in over
+// the current one, which stays fully opaque underneath, so the shared studio backdrop never dims.
+const stillPaint = ui.bottleImgs.map(() => -1);
+function paintBottles(stage) {
+  const n = STOPS.length - 1, i = Math.min(n - 1, Math.floor(stage)), f = smooth(0.12, 0.88, stage - i);
+  ui.bottleImgs.forEach((img, k) => {
+    const o = Math.round((k === i ? 1 : k === i + 1 ? f : 0) * 1000) / 1000;
+    if (o === stillPaint[k]) return;
+    stillPaint[k] = o;
+    img.style.opacity = o;
+  });
+}
 // Frame-time watchdog for the 3D bottle. Slow frames first drop it to lighter rendering,
 // then to the pre-rendered bottle images, so scrolling never stalls on a weak GPU.
 const watch = { last: 0, n: 0, sum: 0, warm: 0, level: 0 };
@@ -687,6 +704,7 @@ function paintShow(dt) {
   if (Math.abs(target - showStageVal) < 0.002) showStageVal = target;
   setShowIndex(clamp(Math.round(showStageVal), 0, STOPS.length - 1));
   paintPhotos(showStageVal);
+  if (!showcase) paintBottles(showStageVal);
   if (showcase) {
     const visible = nearView(showSec, 0.05);
     showcase.setVisible(visible);
@@ -843,6 +861,7 @@ function paintFac(dt) {
 /* ---------- Frame loop ---------- */
 let last = performance.now();
 function tick(now) {
+  const t0 = perf ? performance.now() : 0;
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   lenis?.raf(now);
@@ -853,8 +872,53 @@ function tick(now) {
   paintShow(dt);
   paintHz();
   paintFac(dt);
+  perf?.frame(now, performance.now() - t0);
   requestAnimationFrame(tick);
 }
+
+// Add ?perf to the address to see live scroll performance on the device itself: frame rate,
+// dropped frames, the page's own work per frame, how far each film trails the scroll, and which
+// player each film and the bottle are using. Nothing is shown or measured otherwise.
+const perf = /[?&]perf\b/.test(location.search) ? (() => {
+  const box = document.createElement("div");
+  box.setAttribute("aria-hidden", "true");
+  box.style.cssText = "position:fixed;left:6px;top:calc(env(safe-area-inset-top,0px) + 68px);z-index:9999;font:11px/1.4 ui-monospace,Menlo,Consolas,monospace;background:rgba(11,30,51,.88);color:#fff;padding:6px 8px;border-radius:2px;pointer-events:none;white-space:pre;max-width:calc(100vw - 12px)";
+  document.body.append(box);
+  let prev = 0, shown = 0; const gaps = [], js = [], lagH = [], lagF = [];
+  const lagOf = (pl) => {
+    if (!pl.ready || pl.target == null) return null;
+    const at = pl.full.ready ? pl.full.video.currentTime : pl.frames.canvas.frameShown != null ? pl.frames.canvas.frameShown / pl.frames.fps : null;
+    return at == null || Number.isNaN(at) ? null : Math.abs(pl.target - at) * 24;
+  };
+  const player = (pl) => pl.full.ready ? `video ${(pl.full.video.currentSrc || "").split("/").pop()}` : pl.frames.ready ? "image frames" : "loading";
+  const trim = (a, n) => { while (a.length > n) a.shift(); };
+  return {
+    frame(now, work) {
+      if (prev) gaps.push(now - prev);
+      prev = now; js.push(work);
+      const h = nearView(film, 0) ? lagOf(filmScrub) : null, f = nearView(fac, 0) ? lagOf(facScrub) : null;
+      if (h != null) lagH.push(h);
+      if (f != null) lagF.push(f);
+      trim(gaps, 300); trim(js, 300); trim(lagH, 300); trim(lagF, 300);
+      if (now - shown < 500 || gaps.length < 10) return;
+      shown = now;
+      const sorted = [...gaps].sort((a, b) => a - b), base = sorted[sorted.length >> 1];
+      const dropped = gaps.filter((g) => g > base * 1.6).length;
+      const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+      const pct = (a, q) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length * q)] : 0);
+      const v = filmScrub.full.video.dataset.seek, fv = facScrub.full.video.dataset.seek;
+      box.textContent = [
+        `${Math.round(1000 / base)} fps | dropped ${dropped}/${gaps.length} | worst ${Math.round(sorted[sorted.length - 1])} ms`,
+        `page work ${avg(js).toFixed(1)} ms avg, ${Math.max(...js).toFixed(1)} max`,
+        `hero: ${player(filmScrub)}${v ? ` (${v})` : ""}`,
+        lagH.length ? `  trails scroll ${avg(lagH).toFixed(1)} frames avg, ${pct(lagH, 0.95).toFixed(0)} p95` : "",
+        `factory: ${player(facScrub)}${fv ? ` (${fv})` : ""}`,
+        lagF.length ? `  trails scroll ${avg(lagF).toFixed(1)} frames avg, ${pct(lagF, 0.95).toFixed(0)} p95` : "",
+        `bottle: ${showcase ? "live 3D" : showSec.classList.contains("no-webgl") ? "stills" : "stills until 3D is ready"}`,
+      ].filter(Boolean).join("\n");
+    },
+  };
+})() : null;
 requestAnimationFrame(tick);
 
 /* ---------- Quote form ---------- */
