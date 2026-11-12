@@ -106,8 +106,8 @@ function show(el, a, lift = 14) {
 // product pages; the OPTIKKA case study on Codrops). A scrubbed <video> was tried and dropped: it has
 // to decode before every new picture, and in testing only about 60% of the frames a scroll passed
 // through ever reached the screen, late. Here every picture on screen is already decoded:
-//  - frames download compressed, coarse to fine (every 32nd first); frames the visitor is about to
-//    reach jump the queue;
+//  - frames download compressed: every 8th frame of the whole film first, then the rest in film
+//    order; frames the visitor is about to reach jump the queue;
 //  - frames up to 0.8 s ahead in the scroll direction are decoded in advance, off the main thread,
 //    and only frames near the position stay in memory;
 //  - each refresh draws the exact frame for the scroll position, never a blend, with no extra
@@ -143,8 +143,10 @@ class FrameScrub {
     this.ahead = Math.round(this.fps * 0.8); this.behind = Math.round(this.fps * 0.25); this.keep = this.ahead + this.behind + 8;
     this.blobs = new Array(count); this.ready = false; this.sig = ""; this.drawn = null;
     this.canvas.classList.remove("is-ready");
+    // A coarse pass over the whole film first (every 8th frame, an eighth of the download), then
+    // every remaining frame in film order, so the opening, where visitors start, is complete first.
     const order = [0, count - 1], seen = new Set(order);
-    for (const stride of [32, 16, 8, 4, 2, 1]) for (let i = 0; i < count; i += stride) if (!seen.has(i)) { seen.add(i); order.push(i); }
+    for (const stride of [32, 16, 8, 1]) for (let i = 0; i < count; i += stride) if (!seen.has(i)) { seen.add(i); order.push(i); }
     this.queue = order; this.urgent = []; this.urgentSet.clear(); this.inflight = 0;
     for (let k = 0; k < FETCHES; k++) this.pump(dir);
   }
