@@ -125,7 +125,7 @@ class FrameScrub {
     this.ready = false; this.shown = 0; this.dir = ""; this.count = 0;
     this.ox = 50; this.pan = false; this.sig = "";
     this.blobs = []; this.bitmaps = new Map(); this.decoding = new Set(); this.heading = 1;
-    this.urgent = []; this.queue = []; this.inflight = 0; this.frameOf = new WeakMap(); this.speed = 0;
+    this.urgent = []; this.urgentSet = new Set(); this.queue = []; this.inflight = 0; this.frameOf = new WeakMap(); this.speed = 0;
     this.ahead = 20; this.behind = 6; this.keep = 34;
     // Canvas size is measured only when it changes, never during the frame loop.
     this.cw = canvas.clientWidth; this.ch = canvas.clientHeight;
@@ -145,13 +145,13 @@ class FrameScrub {
     this.canvas.classList.remove("is-ready");
     const order = [0, count - 1], seen = new Set(order);
     for (const stride of [32, 16, 8, 4, 2, 1]) for (let i = 0; i < count; i += stride) if (!seen.has(i)) { seen.add(i); order.push(i); }
-    this.queue = order; this.urgent = []; this.inflight = 0;
+    this.queue = order; this.urgent = []; this.urgentSet.clear(); this.inflight = 0;
     for (let k = 0; k < FETCHES; k++) this.pump(dir);
   }
   pump(dir) {
     if (this.dir !== dir) return;
     let i;
-    while (this.urgent.length && (i === undefined || this.blobs[i] !== undefined)) i = this.urgent.shift();
+    while (this.urgent.length && (i === undefined || this.blobs[i] !== undefined)) { i = this.urgent.shift(); this.urgentSet.delete(i); }
     while ((i === undefined || this.blobs[i] !== undefined) && this.queue.length) i = this.queue.shift();
     if (i === undefined || this.blobs[i] !== undefined) return;
     this.blobs[i] = null;                       // requested
@@ -170,10 +170,10 @@ class FrameScrub {
     if (i < 0 || i >= this.count || this.bitmaps.has(i) || this.decoding.has(i)) return;
     const blob = this.blobs[i];
     if (!blob) {
-      if (blob === undefined && !this.urgent.includes(i)) { this.urgent.push(i); if (this.inflight < FETCHES) this.pump(this.dir); }
+      if (blob === undefined && !this.urgentSet.has(i)) { this.urgent.push(i); this.urgentSet.add(i); if (this.inflight < FETCHES) this.pump(this.dir); }
       return;
     }
-    if (this.decoding.size >= DECODES) return;
+    if (this.decoding.size >= DECODES || this.bitmaps.size + this.decoding.size >= this.keep) return;
     this.decoding.add(i);
     const dir = this.dir;
     const done = (bm) => {
@@ -202,14 +202,21 @@ class FrameScrub {
   }
   // Keep decoded frames around the position, weighted toward where the scroll is heading.
   keepWindow(c) {
+    // Hard cap on decoded frames (memory: about 5.8 MB each at 1600x900): first release the frames
+    // farthest from the position, then decode toward where the scroll is heading.
     const h = this.heading;
+    if (this.bitmaps.size > this.keep - DECODES) {
+      const cost = (k) => { const d = (k - c) * h; return d >= 0 ? d : -d * 3; };   // behind goes first
+      const far = [...this.bitmaps.keys()].sort((x, y) => cost(y) - cost(x));
+      for (const k of far.slice(0, this.bitmaps.size - (this.keep - DECODES))) { this.bitmaps.get(k).close?.(); this.bitmaps.delete(k); }
+    }
     // When scrolling fast only every few frames is shown, so decode just those, further out.
     const stride = clamp(Math.round(this.speed), 1, 6);
     this.decode(c);
     for (let d = 1; d <= this.ahead; d++) this.decode(c + d * h * stride);
     for (let d = 1; d <= this.behind; d++) this.decode(c - d * h);
-    for (const [k, b] of this.bitmaps) if (Math.abs(k - c) > this.keep * stride) { b.close?.(); this.bitmaps.delete(k); }
   }
+
   step(target) {
     const before = this.shown;
     this.shown = target;
@@ -242,7 +249,7 @@ class FrameScrub {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(a, (w - dw) * ox / 100, (h - dh) / 2, dw, dh);
-    this.drawn = a; this.sig = sig; c.frameShown = this.frameOf.get(a);   // read by QA tooling only
+    this.drawn = a; this.sig = sig; c.frameShown = this.frameOf.get(a); c.decoded = this.bitmaps.size;   // read by QA tooling only
     if (!this.ready) { this.ready = true; c.classList.add("is-ready"); }
     return this.shown;
   }
