@@ -125,7 +125,7 @@ class FrameScrub {
     this.ready = false; this.shown = 0; this.dir = ""; this.count = 0;
     this.ox = 50; this.pan = false; this.sig = "";
     this.blobs = []; this.bitmaps = new Map(); this.decoding = new Set(); this.heading = 1;
-    this.urgent = []; this.urgentSet = new Set(); this.queue = []; this.inflight = 0; this.frameOf = new WeakMap(); this.speed = 0;
+    this.queue = []; this.inflight = 0; this.fetches = 0; this.frameOf = new WeakMap(); this.speed = 0; this.lastI = 0;
     this.ahead = 20; this.behind = 6; this.keep = 34;
     // Canvas size is measured only when it changes, never during the frame loop.
     this.cw = canvas.clientWidth; this.ch = canvas.clientHeight;
@@ -147,17 +147,38 @@ class FrameScrub {
     // every remaining frame in film order, so the opening, where visitors start, is complete first.
     const order = [0, count - 1], seen = new Set(order);
     for (const stride of [32, 16, 8, 1]) for (let i = 0; i < count; i += stride) if (!seen.has(i)) { seen.add(i); order.push(i); }
-    this.queue = order; this.urgent = []; this.urgentSet.clear(); this.inflight = 0;
+    this.queue = order; this.inflight = 0; this.coarse = order.length - (count - Math.ceil(count / 8)); this.lastI = 0;
     for (let k = 0; k < FETCHES; k++) this.pump(dir);
   }
+  // Which frame to download next. Two of every three downloads go to the missing frame nearest to
+  // the current position, up to 2.5 s of film ahead in the scroll direction (every frame that will
+  // be shown at the current scroll speed); the third keeps the background pass going (every 8th
+  // frame of the film first, then the rest in order), so a nearby frame always exists to show.
+  nextFrame() {
+    const c = this.lastI, h = this.heading, stride = clamp(Math.round(this.speed), 1, 6);
+    const near = () => {
+      for (let d = 0; d <= Math.round(this.fps * 2.5); d++) {
+        const k = c + d * h * stride;
+        if (k < 0 || k >= this.count) break;
+        if (this.blobs[k] === undefined) return k;
+        if (d < this.behind && c - d * h >= 0 && c - d * h < this.count && this.blobs[c - d * h] === undefined) return c - d * h;
+      }
+      return undefined;
+    };
+    const background = () => {
+      while (this.queue.length && this.blobs[this.queue[0]] !== undefined) this.queue.shift();
+      return this.queue.shift();
+    };
+    const coarseLeft = this.queue.length > 0 && this.queue.length > this.count - this.coarse;
+    if (coarseLeft && this.fetches % 3 === 2) return background() ?? near();
+    return near() ?? background();
+  }
   pump(dir) {
-    if (this.dir !== dir) return;
-    let i;
-    while (this.urgent.length && (i === undefined || this.blobs[i] !== undefined)) { i = this.urgent.shift(); this.urgentSet.delete(i); }
-    while ((i === undefined || this.blobs[i] !== undefined) && this.queue.length) i = this.queue.shift();
-    if (i === undefined || this.blobs[i] !== undefined) return;
+    if (this.dir !== dir || this.inflight >= FETCHES) return;
+    const i = this.nextFrame();
+    if (i === undefined) return;
     this.blobs[i] = null;                       // requested
-    this.inflight++;
+    this.inflight++; this.fetches++;
     fetch(`${dir}${String(i).padStart(4, "0")}.webp`)
       .then((r) => (r.ok ? r.blob() : null))
       .catch(() => null)
@@ -165,14 +186,14 @@ class FrameScrub {
         this.inflight--;
         if (this.dir !== dir) return;
         this.blobs[i] = blob || undefined;
-        this.pump(dir);
+        for (let k = this.inflight; k < FETCHES; k++) this.pump(dir);
       });
   }
   decode(i) {
     if (i < 0 || i >= this.count || this.bitmaps.has(i) || this.decoding.has(i)) return;
     const blob = this.blobs[i];
     if (!blob) {
-      if (blob === undefined && !this.urgentSet.has(i)) { this.urgent.push(i); this.urgentSet.add(i); if (this.inflight < FETCHES) this.pump(this.dir); }
+      if (blob === undefined) this.pump(this.dir);   // the scheduler fetches frames near the position first
       return;
     }
     if (this.decoding.size >= DECODES || this.bitmaps.size + this.decoding.size >= this.keep) return;
@@ -232,9 +253,11 @@ class FrameScrub {
     if (!a) {
       // Exact frame not decoded yet (a fast flick): show the closest one that is, so the picture
       // keeps moving with the scroll; before anything is on screen, the nearest downloaded frame.
-      let best = null, bestD = Math.round(this.fps);
+      let best = null, bestD = 4;
       for (const [k, bm] of this.bitmaps) { const d = Math.abs(k - i); if (d < bestD) { best = bm; bestD = d; } }
-      a = best || (!this.ready ? this.firstPicture(i) : null);
+      // Nothing decoded within a few frames (the download is behind a fast scroll): show the closest
+      // frame there is and decode the closest downloaded one, so the picture never stops moving.
+      a = best || this.firstPicture(i);
       if (!a) return this.shown;
     }
     if (!this.cw || !this.ch) return this.shown;
