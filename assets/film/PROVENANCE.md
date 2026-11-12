@@ -82,3 +82,13 @@ film-1920.mp4, film-1920-lite.mp4, factory-1920.mp4 and factory-1080p.mp4 were r
 ## Round 8 (2026-11-11): bottle stills re-rendered
 
 assets/img/bottle-0.webp to bottle-4.webp were re-rendered at 1050x1350 (WebP q88) from the live showcase3d.js scene with source/render-bottles.html (kept locally with the other sources; Edge, hardware WebGL, antialiased), replacing the 700x900 round-2 renders. Phones show these stills instead of the live 3D bottle.
+
+## Round 9 (2026-11-12): interpolated frame sequences replace the videos
+
+The scroll-scrub videos (film-*-avc/hevc.mp4, factory-*-avc/hevc.mp4) were removed; they remain in git history. Measured in a real browser, a scrubbed video put only about 60% of the frames a scroll passed through on screen. The films are frame sequences again, regenerated from the 2K masters (source/gen/up/) with ffmpeg 9.0.2 motion-compensated interpolation (minterpolate, mi_mode=mci, mc_mode=aobmc, me_mode=bidir, vsbmc=1) and written straight to WebP (libwebp, compression level 4):
+- hero-l/ 884 frames, 40 fps, 1600x900 (2560x1440 centre crop of joined.mp4, Lanczos), q66
+- hero-p/ 884 frames, 40 fps, 720x1280 (810x1440 crop of joined.mp4 panned with the page FOCUS curve, Lanczos), q70
+- fac-l/ 299 frames, 30 fps, 1600x900 (2560x1440 crop of fac169.mp4), q62
+- fac-p/ 299 frames, 30 fps, 720x1280 (1440x2560 crop of fac916.mp4), q64
+
+The in-between frames are computed from motion between neighbouring frames of the generated film; no new content was generated.

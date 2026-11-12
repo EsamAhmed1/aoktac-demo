@@ -99,12 +99,10 @@ p { margin: 0; }
 .film { position: relative; height: 760vh; background: var(--hall); }
 .film__stage { position: sticky; top: 0; height: 100vh; height: 100lvh; overflow: hidden; }
 .film__media { position: absolute; inset: 0; background: var(--hall); }
-.film__still, .film__video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: var(--ox, 50%) 50%; }
+.film__still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: var(--ox, 50%) 50%; }
 .film__still { opacity: 0; transition: opacity .35s ease; }
 .film__still.is-on { opacity: 1; }
-.film__video { opacity: 0; transition: opacity .4s ease; }
-.film__video.is-ready { opacity: 1; }
-/* Image-sequence version of the film (Safari, phones, tablets), cover-fit by app.js */
+/* The films: frame sequences cover-fit on a canvas by app.js */
 .film__frames, .fac__frames { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity .4s ease; }
 .film__frames.is-ready, .fac__frames.is-ready { opacity: 1; }
 .film__heat { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 90% at 50% 120%, rgba(242, 138, 46, .22), rgba(242, 138, 46, 0) 60%); opacity: 0; }
@@ -295,9 +293,7 @@ p { margin: 0; }
 .fac { position: relative; height: 420vh; background: var(--ink); }
 .fac__stage { position: sticky; top: 0; height: 100vh; height: 100lvh; overflow: hidden; color: #fff; }
 .fac__media { position: absolute; inset: 0; background: var(--fog); }
-.fac__poster, .fac__video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.fac__video { opacity: 0; transition: opacity .4s ease; }
-.fac__video.is-ready { opacity: 1; }
+.fac__poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .fac__media::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(11, 30, 51, .74) 0%, rgba(11, 30, 51, .32) 38%, rgba(11, 30, 51, 0) 62%); }
 .fac__beats { position: absolute; left: var(--gutter); right: var(--gutter); bottom: calc(clamp(64px, 12vh, 140px) + var(--tb)); max-width: 44rem; }
 .fac__beat { position: absolute; left: 0; bottom: 0; width: 100%; opacity: 0; visibility: hidden; font-size: clamp(1.5rem, 2.6vw, 2.4rem); letter-spacing: -0.03em; line-height: 1.15; }

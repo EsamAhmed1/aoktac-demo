@@ -17,7 +17,9 @@ const saveData = navigator.connection && (navigator.connection.saveData || /(^|-
 const touchFirst = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
 let lenis = null;
 if (!reduceMotion && !touchFirst && window.Lenis) {
-  lenis = new window.Lenis({ lerp: 0.11, smoothWheel: true });
+  // lerp 0.2 = 1 - e^(-12 t): the same response as Lusion's scroll on oryzo.ai, about twice as quick
+  // as Lenis's default. It is the only smoothing between the wheel and the film.
+  lenis = new window.Lenis({ lerp: 0.2, smoothWheel: true });
   window.lenis = lenis;
 }
 function scrollToY(y) {
@@ -100,190 +102,61 @@ function show(el, a, lift = 14) {
   if (el.inert !== inert) el.inert = inert;
 }
 
-// WebKit (Safari, and every browser on iPhone and iPad) refuses video from blob: URLs,
-// so there the film streams from its own URL instead of a downloaded copy.
+// The films are frame sequences drawn on a canvas, the way lag-free scroll films are built (Apple's
+// product pages; the OPTIKKA case study on Codrops). A scrubbed <video> was tried and dropped: it has
+// to decode before every new picture, and in testing only about 60% of the frames a scroll passed
+// through ever reached the screen, late. Here every picture on screen is already decoded:
+//  - frames download compressed, coarse to fine (every 32nd first); frames the visitor is about to
+//    reach jump the queue;
+//  - frames up to 0.8 s ahead in the scroll direction are decoded in advance, off the main thread,
+//    and only frames near the position stay in memory;
+//  - each refresh draws the exact frame for the scroll position, never a blend, with no extra
+//    easing on top of the scroll.
+// The films run at 40 fps (hero) and 30 fps (factory), motion-interpolated from the 24 fps masters,
+// so a slow scroll moves the picture in small steps instead of holding each frame.
 const ua = navigator.userAgent;
-const blobVideo = !(/AppleWebKit/.test(ua) && !/(Chrome|Chromium|Edg|OPR)\//.test(ua));
-
-// The films are scrubbed as video, the way Apple's product pages do it. Each file has a full
-// keyframe every 3 frames and no B-frames, so any seek decodes at most two frames, and it is decoded
-// by the device's video hardware instead of the main thread. Safari and iPhone get HEVC, everything
-// else H.264. Where blob video works (Chrome, Edge, Firefox, Android) the file is held in memory;
-// Safari refuses blob video, so it downloads the whole file first and plays it from its URL.
-class Scrub {
-  constructor(video, duration, fps = 24) {
-    this.video = video; this.duration = duration; this.fps = fps; this.ready = false; this.shown = 0; this.loading = null;
-    // The video has to prove it can keep up on this device: the first seeks are timed, and if the
-    // typical one takes too long the film goes back to the image frames (verdict false).
-    // The page's own frame rate is watched too, since on some devices seeking stalls the page.
-    this.verdict = null; this.lat = []; this.gaps = []; this.stalls = 0; this.seekAt = 0; this.lastStep = 0; this.lastTarget = -1;
-    video.addEventListener("seeked", () => {
-      if (!this.seekAt) return;
-      const d = performance.now() - this.seekAt;
-      this.seekAt = 0;
-      if (this.verdict === null && !document.hidden) { this.lat.push(d); this.judge(); }
-    });
-    document.addEventListener("visibilitychange", () => { this.lastStep = 0; this.seekAt = 0; });
-  }
-  judge() {
-    const median = (a) => [...a].sort((x, y) => x - y)[a.length >> 1];
-    if (this.stalls >= 2) this.verdict = false;
-    else if (this.lat.length >= 16 && this.gaps.length >= 16) this.verdict = median(this.lat) <= SEEK_OK_MS && median(this.gaps) <= FRAME_OK_MS;
-    else return;
-    this.video.dataset.seek = `${this.verdict ? "ok" : "slow"}: seek ${Math.round(median(this.lat) || 0)}ms, frame ${Math.round(median(this.gaps) || 0)}ms`;   // for QA
-  }
-  attach(url) {
-    const v = this.video;
-    return new Promise((done) => {
-      const finish = (ok) => { v.removeEventListener("loadeddata", yes); v.removeEventListener("error", no); done(ok); };
-      const yes = () => finish(true), no = () => finish(false);
-      v.addEventListener("loadeddata", yes);
-      v.addEventListener("error", no);
-      v.preload = "auto";
-      v.src = url;
-      v.load();
-      // iOS decodes nothing until a video has played once; a muted inline play is allowed.
-      if (!url.startsWith("blob:")) v.play()?.then(() => v.pause()).catch(() => {});
-    });
-  }
-  load(src) {
-    if (!this.loading) this.loading = this.#load(src);
-    return this.loading;
-  }
-  async #load(src) {
-    if (reduceMotion || saveData) return false;
-    let ok = false;
-    if (blobVideo) {
-      let blob = null;
-      for (let i = 0; i < 2 && !blob; i++) {
-        try { const r = await fetch(src); if (r.ok) blob = await r.blob(); } catch { /* retry once */ }
-      }
-      // An untyped blob is refused by Firefox's media sniffer, so label it.
-      if (blob) ok = await this.attach(URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: "video/mp4" })));
-    } else {
-      // Safari: pull the whole file into the HTTP cache first, so seeking never waits on the network.
-      try { await (await fetch(src)).arrayBuffer(); } catch { /* the video element will fetch it */ }
-    }
-    if (!ok) ok = await this.attach(src);
-    if (!ok) return false;
-    const v = this.video;
-    v.pause();
-    // Hand over only once the whole film is buffered (or after 8 s at most).
-    await new Promise((res) => {
-      const t0 = performance.now();
-      const check = () => {
-        const b = v.buffered, d = v.duration || this.duration;
-        if ((b.length && b.end(b.length - 1) >= d - 0.25) || performance.now() - t0 > 8000) res(); else setTimeout(check, 120);
-      };
-      check();
-    });
-    this.duration = v.duration || this.duration;
-    v.currentTime = this.frameTime(this.shown);
-    this.ready = true;
-    v.classList.add("is-ready");
-    return true;
-  }
-  // Seek to whole film frames only: a new seek is issued just when the picture would change.
-  frameTime(t) { return clamp(Math.round(t * this.fps) / this.fps, 0, this.duration - 0.05); }
-  step(target, dt) {
-    if (this.ready && this.verdict === null) {
-      const now = performance.now();
-      if (this.lastStep && target !== this.lastTarget) {
-        const gap = now - this.lastStep;
-        this.gaps.push(gap);
-        if (gap > 400) this.stalls++;
-        this.judge();
-      }
-      this.lastStep = now; this.lastTarget = target;
-    }
-    this.shown += (target - this.shown) * filmFollow(dt);
-    if (Math.abs(target - this.shown) < 0.004) this.shown = target;
-    const v = this.video;
-    if (this.ready && !v.seeking) {
-      const want = this.frameTime(this.shown);
-      if (Math.abs(v.currentTime - want) > 0.5 / this.fps) { this.seekAt = performance.now(); v.currentTime = want; }
-    }
-    return this.shown;
-  }
-}
-
-// The same film as a numbered image sequence drawn to a canvas. It bridges the first moments
-// while the video loads (every 8th frame only), and plays the whole film if the video cannot load.
-//  - Frames download compressed, coarse to fine (every 16th first); frames the visitor is about
-//    to reach jump the queue.
-//  - Only frames near the current position are decoded, ahead of the scroll direction, and only
-//    nearby frames stay in memory.
-//  - Each picture is a real, sharp frame rather than a blend.
-// A seek this slow (typical of the first 16) means the video would update the picture fewer than
-// about 20 times a second while scrolling; the image frames are smoother there.
-const SEEK_OK_MS = 50, FRAME_OK_MS = 34;
-// 24 fps frames: decode further ahead so a fast scroll never waits for a frame.
-const AHEAD = 18, BEHIND = 6, KEEP = 32;
-// How quickly the film catches up with the scroll. Touch scrolling is already smooth, so the film
-// follows the finger directly; on desktop a light catch-up (about 50 ms) rides on smooth scrolling.
-const filmFollow = (dt) => (reduceMotion || touchFirst ? 1 : 1 - Math.exp(-dt * 20));
+// Safari decodes createImageBitmap(blob) on the main thread; decoding through an <img> first does not.
+const webkit = /AppleWebKit/.test(ua) && !/(Chrome|Chromium|Edg|OPR)\//.test(ua);
+const FETCHES = 8, DECODES = 6;
 class FrameScrub {
   constructor(canvas, duration) {
     this.canvas = canvas; this.ctx = canvas.getContext("2d", { alpha: false });
-    this.duration = duration; this.fps = 10;
+    this.duration = duration; this.fps = 24;
     this.ready = false; this.shown = 0; this.dir = ""; this.count = 0;
     this.ox = 50; this.pan = false; this.sig = "";
-    this.retired = false; this.onReady = null;
     this.blobs = []; this.bitmaps = new Map(); this.decoding = new Set(); this.heading = 1;
     this.urgent = []; this.queue = []; this.inflight = 0; this.frameOf = new WeakMap(); this.speed = 0;
+    this.ahead = 20; this.behind = 6; this.keep = 34;
     // Canvas size is measured only when it changes, never during the frame loop.
     this.cw = canvas.clientWidth; this.ch = canvas.clientHeight;
     new ResizeObserver(() => { this.cw = canvas.clientWidth; this.ch = canvas.clientHeight; this.sig = ""; }).observe(canvas);
-  }
-  // The video could not load: fetch the rest of the frames so the film still plays in full.
-  fill() {
-    if (!this.dir || this.retired) return;
-    const queued = new Set(this.queue);
-    for (const stride of [4, 2, 1]) for (let i = 0; i < this.count; i += stride) if (this.blobs[i] === undefined && !queued.has(i)) { queued.add(i); this.queue.push(i); }
-    for (let k = this.inflight; k < 6; k++) this.pump(this.dir);
   }
   free() {
     for (const b of this.bitmaps.values()) b.close?.();
     this.bitmaps.clear(); this.decoding.clear();
   }
-  // While the video is on trial: fade the canvas out but keep the downloaded frames.
-  hide() {
-    if (this.hidden) return;
-    this.hidden = true;
-    this.canvas.classList.remove("is-ready");
-    setTimeout(() => { if (this.hidden) this.free(); }, 600);
-  }
-  // The video failed its trial: the frames take the film back from where it is.
-  unhide(at) {
-    this.hidden = false; this.shown = at; this.drawn = null; this.sig = "";
-    this.ready = false;                 // the canvas fades back in with its first new frame
-  }
-  // Hand over to the full video: stop fetching frames and fade the canvas out over it.
-  retire() {
-    this.retired = true;
-    this.canvas.classList.remove("is-ready");
-    setTimeout(() => this.free(), 600);
-  }
-  load(dir, count, pan = false, strides = [16, 8, 4, 2, 1]) {
-    if (reduceMotion || saveData || this.retired || dir === this.dir) return;
+  load(dir, count, pan = false) {
+    if (reduceMotion || saveData || dir === this.dir) return;
     this.free();
     this.dir = dir; this.pan = pan; this.count = count; this.fps = count / this.duration;
+    // Decode window in time, not frames, so it covers the same stretch of scroll at any frame rate.
+    this.ahead = Math.round(this.fps * 0.8); this.behind = Math.round(this.fps * 0.25); this.keep = this.ahead + this.behind + 8;
     this.blobs = new Array(count); this.ready = false; this.sig = ""; this.drawn = null;
     this.canvas.classList.remove("is-ready");
     const order = [0, count - 1], seen = new Set(order);
-    for (const stride of strides) for (let i = 0; i < count; i += stride) if (!seen.has(i)) { seen.add(i); order.push(i); }
+    for (const stride of [32, 16, 8, 4, 2, 1]) for (let i = 0; i < count; i += stride) if (!seen.has(i)) { seen.add(i); order.push(i); }
     this.queue = order; this.urgent = []; this.inflight = 0;
-    for (let k = 0; k < 6; k++) this.pump(dir);
+    for (let k = 0; k < FETCHES; k++) this.pump(dir);
   }
   pump(dir) {
-    if (this.dir !== dir || this.retired) return;
+    if (this.dir !== dir) return;
     let i;
     while (this.urgent.length && (i === undefined || this.blobs[i] !== undefined)) i = this.urgent.shift();
     while ((i === undefined || this.blobs[i] !== undefined) && this.queue.length) i = this.queue.shift();
     if (i === undefined || this.blobs[i] !== undefined) return;
     this.blobs[i] = null;                       // requested
     this.inflight++;
-    fetch(`${dir}${String(i).padStart(3, "0")}.webp`)
+    fetch(`${dir}${String(i).padStart(4, "0")}.webp`)
       .then((r) => (r.ok ? r.blob() : null))
       .catch(() => null)
       .then((blob) => {
@@ -297,19 +170,24 @@ class FrameScrub {
     if (i < 0 || i >= this.count || this.bitmaps.has(i) || this.decoding.has(i)) return;
     const blob = this.blobs[i];
     if (!blob) {
-      if (blob === undefined && !this.urgent.includes(i)) { this.urgent.push(i); if (this.inflight < 6) this.pump(this.dir); }
+      if (blob === undefined && !this.urgent.includes(i)) { this.urgent.push(i); if (this.inflight < FETCHES) this.pump(this.dir); }
       return;
     }
-    if (this.decoding.size >= 4) return;
+    if (this.decoding.size >= DECODES) return;
     this.decoding.add(i);
     const dir = this.dir;
     const done = (bm) => {
       this.decoding.delete(i);
-      if (this.dir !== dir || this.retired) { bm?.close?.(); return; }
+      if (this.dir !== dir) { bm?.close?.(); return; }
       if (bm) { this.bitmaps.set(i, bm); this.frameOf.set(bm, i); }
     };
-    if (window.createImageBitmap) createImageBitmap(blob).then(done, () => done(null));
-    else { const img = new Image(); img.src = URL.createObjectURL(blob); img.decode().then(() => done(img), () => done(null)); }
+    if (!webkit && window.createImageBitmap) { createImageBitmap(blob).then(done, () => done(null)); return; }
+    const img = new Image(), url = URL.createObjectURL(blob);
+    img.src = url;
+    img.decode()
+      .then(() => (window.createImageBitmap ? createImageBitmap(img) : img))
+      .then(done, () => done(null))
+      .finally(() => URL.revokeObjectURL(url));
   }
   // Before anything is on screen, start from the closest frame already downloaded; the exact
   // frames replace it a moment later.
@@ -325,20 +203,18 @@ class FrameScrub {
   // Keep decoded frames around the position, weighted toward where the scroll is heading.
   keepWindow(c) {
     const h = this.heading;
-    // When scrolling fast only every 2nd or 3rd frame is shown, so decode just those, further out.
-    const stride = clamp(Math.round(this.speed), 1, 4);
+    // When scrolling fast only every few frames is shown, so decode just those, further out.
+    const stride = clamp(Math.round(this.speed), 1, 6);
     this.decode(c);
-    for (let d = 1; d <= AHEAD; d++) this.decode(c + d * h * stride);
-    for (let d = 1; d <= BEHIND; d++) this.decode(c - d * h);
-    for (const [k, b] of this.bitmaps) if (Math.abs(k - c) > KEEP) { b.close?.(); this.bitmaps.delete(k); }
+    for (let d = 1; d <= this.ahead; d++) this.decode(c + d * h * stride);
+    for (let d = 1; d <= this.behind; d++) this.decode(c - d * h);
+    for (const [k, b] of this.bitmaps) if (Math.abs(k - c) > this.keep * stride) { b.close?.(); this.bitmaps.delete(k); }
   }
-  step(target, dt) {
+  step(target) {
     const before = this.shown;
-    this.shown += (target - this.shown) * filmFollow(dt);
-    if (Math.abs(target - this.shown) < 0.002) this.shown = target;
-    if (!this.count || this.retired) return this.shown;
+    this.shown = target;
+    if (!this.count) return this.shown;
     if (this.shown !== before) this.heading = this.shown > before ? 1 : -1;
-    // Every film frame is a real, sharp frame: the nearest one is drawn, never a blend of two.
     const i = Math.round(clamp(this.shown * this.fps, 0, this.count - 1));
     this.speed = this.speed * 0.7 + Math.abs(i - (this.lastI ?? i)) * 0.3;   // frames per refresh
     this.lastI = i;
@@ -347,7 +223,7 @@ class FrameScrub {
     if (!a) {
       // Exact frame not decoded yet (a fast flick): show the closest one that is, so the picture
       // keeps moving with the scroll; before anything is on screen, the nearest downloaded frame.
-      let best = null, bestD = 25;
+      let best = null, bestD = Math.round(this.fps);
       for (const [k, bm] of this.bitmaps) { const d = Math.abs(k - i); if (d < bestD) { best = bm; bestD = d; } }
       a = best || (!this.ready ? this.firstPicture(i) : null);
       if (!a) return this.shown;
@@ -360,63 +236,16 @@ class FrameScrub {
     const sig = `${w}x${h}:${ox.toFixed(1)}`;
     if (a === this.drawn && sig === this.sig) return this.shown;   // same frame, same canvas
     if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
-    // cover-fit, with the same horizontal focus as CSS object-position; high-quality scaling to
-    // the screen's pixels keeps edges crisp
+    // cover-fit, with the same horizontal focus as CSS object-position
     const s = Math.max(w / iw, h / ih), dw = iw * s, dh = ih * s;
     const ctx = this.ctx;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(a, (w - dw) * ox / 100, (h - dh) / 2, dw, dh);
     this.drawn = a; this.sig = sig; c.frameShown = this.frameOf.get(a);   // read by QA tooling only
-    if (!this.ready) { this.ready = true; c.classList.add("is-ready"); this.onReady?.(); }
+    if (!this.ready) { this.ready = true; c.classList.add("is-ready"); }
     return this.shown;
   }
-}
-
-// Frames first, video second. A coarse set of frames (every 8th) is ready after a few hundred KB,
-// so the film follows the scroll almost at once on any connection; the full-quality video then
-// takes over at the same moment of the film once it is completely loaded. If the video cannot
-// load, the rest of the frames are fetched instead.
-function filmPlayer(canvas, video, duration) {
-  const frames = new FrameScrub(canvas, duration);
-  const full = new Scrub(video, duration);
-  return {
-    frames, full, duration, prePanned: false,
-    get ready() { return frames.ready || full.ready; },
-    get shown() { return full.ready ? full.shown : frames.shown; },
-    set ox(v) { frames.ox = v; },
-    load(frameDir, count, pan, videoSrc, prePanned = false) {
-      if (videoSrc && !this.videoQueued) {
-        this.videoQueued = true;
-        this.prePanned = prePanned;
-        const go = () => full.load(videoSrc).then((ok) => { if (!ok) frames.fill(); });
-        frames.onReady = go;
-        setTimeout(go, 1500);            // also if the frames are slow to arrive
-      }
-      frames.load(frameDir, count, pan, videoSrc ? [16, 8] : undefined);
-    },
-    fallBack() {
-      const v = full.video;
-      full.ready = false;
-      v.classList.remove("is-ready");
-      setTimeout(() => { const src = v.src; v.removeAttribute("src"); v.load(); if (src.startsWith("blob:")) URL.revokeObjectURL(src); }, 600);
-      frames.unhide(full.shown);
-      frames.fill();
-    },
-    step(target, dt) {
-      this.target = target;
-      if (full.ready) {
-        if (full.verdict === true) { if (!frames.retired) frames.retire(); }
-        else frames.hide();
-        const t = full.step(target, dt);
-        if (full.verdict === false) this.fallBack();
-        return t;
-      }
-      const t = frames.step(target, dt);
-      full.shown = t;   // the video starts exactly where the frames are
-      return t;
-    },
-  };
 }
 
 /* ---------- 1. Hero and process film ---------- */
@@ -424,7 +253,7 @@ const film = $("#film");
 const filmStage = $(".film__stage", film);
 const filmMedia = $(".film__media", film);
 const filmHeat = $(".film__heat", film);
-const filmScrub = filmPlayer($(".film__frames", film), $(".film__video", film), 22.13);
+const filmScrub = new FrameScrub($(".film__frames", film), 22.125);
 const stills = $$(".film__still", film);
 const CAPS = {
   hero: { from: -1, to: 1.2, fade: 1.1 }, cue: { from: -1, to: 0.4, fade: 0.8 },
@@ -444,15 +273,14 @@ const focusAt = (t) => {
 let lastStill = -1;
 function paintFilm(dt) {
   if (!nearView(film, 0.2)) {
-    if (!nearView(film, 2) && filmScrub.frames.bitmaps.size) filmScrub.frames.free();
+    if (!nearView(film, 2) && filmScrub.bitmaps.size) filmScrub.free();
     return;
   }
   const portrait = innerWidth / innerHeight < 1.2;
   filmScrub.ox = portrait ? focusAt(filmScrub.shown) : 50;
-  const t = filmScrub.step(filmScrub.duration * progressOf(film), dt);
-  // --ox pans the stills and video; the canvas pans itself, so skip it while the canvas shows.
-  // --ox pans the stills and a landscape video; the canvas pans itself, and the portrait video is pre-panned.
-  if (!(filmScrub.frames.ready && !filmScrub.full.ready)) setStyle(filmMedia, "--ox", portrait && !(filmScrub.full.ready && filmScrub.prePanned) ? `${focusAt(t).toFixed(1)}%` : "50%");
+  const t = filmScrub.step(filmScrub.duration * progressOf(film));
+  // --ox pans the stills shown before the frames arrive; the canvas pans itself.
+  if (!filmScrub.ready) setStyle(filmMedia, "--ox", portrait ? `${focusAt(t).toFixed(1)}%` : "50%");
   setStyle(filmHeat, "opacity", clamp(1 - Math.abs(t - 7) / 4, 0, 1).toFixed(2));
   setStyle(filmMedia, "--wash", clamp(1 - t / 1.8, 0, 1).toFixed(2));
   for (const { el, cfg } of caps) show(el, fadeIn(t, cfg.from, cfg.to, cfg.fade));
@@ -466,17 +294,12 @@ function paintFilm(dt) {
     lastStill = -2;
   }
 }
-// Full HD everywhere; phones, tablets and slow connections get a lighter encode of the same 1080p frames.
-// Safari (Mac, iPad, iPhone) decodes HEVC in hardware: same quality in a smaller file.
-const hevc = !blobVideo && (() => { try { return !!document.createElement("video").canPlayType('video/mp4; codecs="hvc1"'); } catch { return false; } })();
-const filmVideo = (name, portrait) => `assets/film/${name}-${portrait ? "p" : "l"}-${hevc ? "hevc" : "avc"}.mp4`;
-// Frame sets: phones get a 608x1080 crop that already follows the film's pan; wider screens
-// get 1600x900 frames panned on the canvas.
-// Phones get an 810x1440 portrait video that already follows the film's pan; wider screens 1920x1080.
+// Phones get 720x1280 frames that already follow the film's pan; wider screens get 1600x900
+// frames panned on the canvas. 884 frames over 22.125 s, 40 fps.
 const filmFrames = () => innerWidth / innerHeight < 0.8
-  ? filmScrub.load("assets/film/frames/hero-p/", 531, false, filmVideo("film", true), true)
-  : filmScrub.load("assets/film/frames/hero-l/", 531, true, filmVideo("film", false));
-addEventListener("resize", () => { if (filmScrub.frames.dir) filmFrames(); });
+  ? filmScrub.load("assets/film/frames/hero-p/", 884, false)
+  : filmScrub.load("assets/film/frames/hero-l/", 884, true);
+addEventListener("resize", () => { if (filmScrub.dir) filmFrames(); });
 // Start as soon as the page is parsed rather than after every image has loaded.
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", filmFrames, { once: true }); else filmFrames();
 
@@ -841,7 +664,7 @@ addEventListener("load", layoutHz, { once: true });
 
 /* ---------- 4. Factory approach ---------- */
 const fac = $("#factory");
-const facScrub = filmPlayer($(".fac__frames", fac), $(".fac__video", fac), 10);
+const facScrub = new FrameScrub($(".fac__frames", fac), 10);
 const facPoster = $(".fac__poster", fac);
 const beats = $$(".fac__beat", fac);
 const BEATS = [[0, 0.2], [0.28, 0.46], [0.54, 0.72], [0.8, 1.2]];
@@ -850,11 +673,11 @@ if (facPortrait()) facPoster.src = "assets/film/factory-poster-p.webp";
 function paintFac(dt) {
   // Fetch three screens early so the frames are already here when the visitor arrives.
   if (nearView(fac, 3)) {
-    facScrub.load(facPortrait() ? "assets/film/frames/fac-p/" : "assets/film/frames/fac-l/", 200, false, filmVideo("factory", facPortrait()));
+    facScrub.load(facPortrait() ? "assets/film/frames/fac-p/" : "assets/film/frames/fac-l/", 299, false);
   }
   if (!nearView(fac, 0.2)) return;
   const p = progressOf(fac);
-  facScrub.step(p * facScrub.duration, dt);
+  facScrub.step(p * facScrub.duration);
   beats.forEach((el, i) => show(el, fadeIn(p, BEATS[i][0], BEATS[i][1], 0.06), 22));
 }
 
@@ -885,12 +708,9 @@ const perf = /[?&]perf\b/.test(location.search) ? (() => {
   box.style.cssText = "position:fixed;left:6px;top:calc(env(safe-area-inset-top,0px) + 68px);z-index:9999;font:11px/1.4 ui-monospace,Menlo,Consolas,monospace;background:rgba(11,30,51,.88);color:#fff;padding:6px 8px;border-radius:2px;pointer-events:none;white-space:pre;max-width:calc(100vw - 12px)";
   document.body.append(box);
   let prev = 0, shown = 0; const gaps = [], js = [], lagH = [], lagF = [];
-  const lagOf = (pl) => {
-    if (!pl.ready || pl.target == null) return null;
-    const at = pl.full.ready ? pl.full.video.currentTime : pl.frames.canvas.frameShown != null ? pl.frames.canvas.frameShown / pl.frames.fps : null;
-    return at == null || Number.isNaN(at) ? null : Math.abs(pl.target - at) * 24;
-  };
-  const player = (pl) => pl.full.ready ? `video ${(pl.full.video.currentSrc || "").split("/").pop()}` : pl.frames.ready ? "image frames" : "loading";
+  // How many film frames the picture on screen trails the scroll position.
+  const lagOf = (pl) => (pl.ready && pl.canvas.frameShown != null ? Math.abs(pl.shown * pl.fps - pl.canvas.frameShown) : null);
+  const player = (pl) => (pl.ready ? `${pl.count} frames at ${Math.round(pl.fps)} fps, ${pl.bitmaps.size} decoded` : "loading");
   const trim = (a, n) => { while (a.length > n) a.shift(); };
   return {
     frame(now, work) {
@@ -906,13 +726,12 @@ const perf = /[?&]perf\b/.test(location.search) ? (() => {
       const dropped = gaps.filter((g) => g > base * 1.6).length;
       const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
       const pct = (a, q) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length * q)] : 0);
-      const v = filmScrub.full.video.dataset.seek, fv = facScrub.full.video.dataset.seek;
       box.textContent = [
         `${Math.round(1000 / base)} fps | dropped ${dropped}/${gaps.length} | worst ${Math.round(sorted[sorted.length - 1])} ms`,
         `page work ${avg(js).toFixed(1)} ms avg, ${Math.max(...js).toFixed(1)} max`,
-        `hero: ${player(filmScrub)}${v ? ` (${v})` : ""}`,
+        `hero: ${player(filmScrub)}`,
         lagH.length ? `  trails scroll ${avg(lagH).toFixed(1)} frames avg, ${pct(lagH, 0.95).toFixed(0)} p95` : "",
-        `factory: ${player(facScrub)}${fv ? ` (${fv})` : ""}`,
+        `factory: ${player(facScrub)}`,
         lagF.length ? `  trails scroll ${avg(lagF).toFixed(1)} frames avg, ${pct(lagF, 0.95).toFixed(0)} p95` : "",
         `bottle: ${showcase ? "live 3D" : showSec.classList.contains("no-webgl") ? "stills" : "stills until 3D is ready"}`,
       ].filter(Boolean).join("\n");

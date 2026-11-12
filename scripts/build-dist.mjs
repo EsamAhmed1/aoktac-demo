@@ -20,12 +20,6 @@ writeFileSync(join(out, "_headers"), `/assets/*
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
 `);
 
-// Byte sizes of the film videos for functions/assets/film/[name].js, which answers Safari's range
-// requests on Cloudflare Pages (the static file it gets there carries no Content-Length).
-const film = join(root, "assets", "film"), sizes = {};
-for (const n of readdirSync(film)) if (n.endsWith(".mp4")) sizes[n] = statSync(join(film, n)).size;
-writeFileSync(join(root, "functions", "_film-sizes.json"), JSON.stringify(sizes, null, 2) + "\n");
-
 let files = 0, bytes = 0;
 const walk = (d) => { for (const n of readdirSync(d)) { const p = join(d, n), s = statSync(p); if (s.isDirectory()) walk(p); else { files++; bytes += s.size; } } };
 walk(out);
